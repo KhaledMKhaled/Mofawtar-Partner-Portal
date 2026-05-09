@@ -26,7 +26,7 @@ import {
   type OperationType,
   type RequestStatus,
 } from "../../shared/requests.js";
-import { getOwnerAt, hasPreviousActivation, startOwnership } from "../ownership.js";
+import { getOwnerAt, getLatestOwnership, hasPreviousActivation, startOwnership } from "../ownership.js";
 
 export const requestsRouter = Router();
 
@@ -142,6 +142,7 @@ requestsRouter.get("/lookup/:tax", requirePerm("requests:view"), async (req, res
   if (!cust) return res.json({ found: false });
 
   const owner = await getOwnerAt(cust.id);
+  const latest = await getLatestOwnership(cust.id);
   // Active in-progress request under any partner blocks duplicates.
   const inProgress = await db
     .select({
@@ -167,15 +168,14 @@ requestsRouter.get("/lookup/:tax", requirePerm("requests:view"), async (req, res
   if (inProgress.length > 0) {
     canCreate = false;
     blockReason = "duplicate_active_request";
-  } else if (partnerScoped(cu) && owner) {
-    if (owner.partnerId && owner.partnerId !== cu.partnerId &&
+  } else if (partnerScoped(cu)) {
+    if (owner && owner.partnerId && owner.partnerId !== cu.partnerId &&
       (owner.status === "active" || owner.status === "extended")) {
       canCreate = false;
       blockReason = "owned_by_other_partner";
-    } else if (
-      (owner.status === "expired" || owner.status === "returned_to_company") &&
-      owner.partnerId !== cu.partnerId
-    ) {
+    } else if (latest && (latest.status === "expired" || latest.status === "returned_to_company")) {
+      // Customer has been released back to the company — partner users
+      // cannot create a new request without a company action.
       canCreate = false;
       blockReason = "owned_by_company_only";
     }
@@ -265,10 +265,14 @@ requestsRouter.post("/draft", requirePerm("requests:create"), async (req, res) =
       );
     if (inProgress.length > 0) return res.status(409).json({ error: "duplicate_active_request" });
     const owner = await getOwnerAt(existingCustomer.id);
-    if (partnerScoped(cu) && owner) {
-      if (owner.partnerId && owner.partnerId !== cu.partnerId &&
+    const latest = await getLatestOwnership(existingCustomer.id);
+    if (partnerScoped(cu)) {
+      if (owner && owner.partnerId && owner.partnerId !== cu.partnerId &&
         (owner.status === "active" || owner.status === "extended")) {
         return res.status(409).json({ error: "owned_by_other_partner" });
+      }
+      if (latest && (latest.status === "expired" || latest.status === "returned_to_company")) {
+        return res.status(409).json({ error: "owned_by_company_only" });
       }
     }
   }
@@ -463,7 +467,13 @@ requestsRouter.get("/", requirePerm("requests:view"), async (req, res) => {
   if (req.query.operationType) filters.push(eq(requests.operationType, String(req.query.operationType)));
   if (req.query.q) {
     const q = `%${String(req.query.q)}%`;
-    filters.push(or(ilike(requests.srNumber, q), ilike(customers.name, q), ilike(customers.taxCardNumber, q))!);
+    filters.push(or(
+      ilike(requests.srNumber, q),
+      ilike(customers.name, q),
+      ilike(customers.taxCardNumber, q),
+      ilike(users.name, q),
+      ilike(partners.name, q),
+    )!);
   }
   if (partnerScoped(cu)) {
     filters.push(eq(requests.partnerId, cu.partnerId!));
@@ -585,6 +595,7 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
   const cu = getUser(req)!;
   const [old] = await db.select().from(requests).where(eq(requests.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
+  if (partnerScoped(cu) && old.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
   const from = old.status as RequestStatus;
   const to = parsed.data.toStatus as RequestStatus;
   if (!isAllowedTransition(from, to)) {
@@ -665,6 +676,7 @@ requestsRouter.post("/:id/reopen", requirePerm("requests:reopen"), async (req, r
   const cu = getUser(req)!;
   const [old] = await db.select().from(requests).where(eq(requests.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
+  if (partnerScoped(cu) && old.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
   if (old.status !== "failed" && old.status !== "rejected") {
     return res.status(409).json({ error: "not_reopenable" });
   }

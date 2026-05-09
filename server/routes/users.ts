@@ -168,6 +168,26 @@ usersRouter.patch("/:id", requirePerm("users:edit"), async (req, res) => {
   res.json(u);
 });
 
+// Sales reps assignable by the current actor when creating a Draft SR.
+// Team leaders see only their direct reports; partner admins see all sales
+// in their partner; company users may pass ?partnerId=. Permission gate is
+// `requests:create` so team leaders can resolve assignees without `users:view`.
+usersRouter.get("/sales-assignable", requirePerm("requests:create"), async (req, res) => {
+  const cu = getUser(req)!;
+  let partnerId: number | null = cu.partnerId ?? null;
+  if (!partnerId && req.query.partnerId) partnerId = Number(req.query.partnerId);
+  if (!partnerId) return res.json([]);
+  const filters = [eq(users.partnerId, partnerId), eq(roles.key, "sales")];
+  if (cu.roleKey === "team_leader") filters.push(eq(users.teamLeaderId, cu.id));
+  const rows = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .innerJoin(roles, eq(roles.id, users.roleId))
+    .where(and(...filters))
+    .orderBy(users.name);
+  res.json(rows);
+});
+
 usersRouter.get("/team-leaders", requirePerm("users:view"), async (req, res) => {
   const cu = getUser(req)!;
   const partnerId = cu.partnerId ?? Number(req.query.partnerId);

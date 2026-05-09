@@ -185,6 +185,18 @@ export async function startOwnership(opts: {
   return row;
 }
 
+// Latest ownership row for a customer (any status, any date), used to gate
+// new requests against expired/returned-to-company state.
+export async function getLatestOwnership(customerId: number) {
+  const [row] = await db
+    .select()
+    .from(customerOwnership)
+    .where(eq(customerOwnership.customerId, customerId))
+    .orderBy(desc(customerOwnership.startDate), desc(customerOwnership.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 // Returns whether this customer has ever been activated by this partner.
 export async function hasPreviousActivation(customerId: number, partnerId: number): Promise<boolean> {
   const rows = await db

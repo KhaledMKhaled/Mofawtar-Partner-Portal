@@ -107,7 +107,7 @@ export function RequestWizard({
 
   const teamMembers = useQuery({
     queryKey: ["users", "team-members", user?.id],
-    queryFn: () => api<{ id: number; name: string }[]>("/api/users"),
+    queryFn: () => api<{ id: number; name: string }[]>("/api/users/sales-assignable"),
     enabled: open && (user?.roleKey === "team_leader" || user?.roleKey === "partner_admin"),
   });
 
