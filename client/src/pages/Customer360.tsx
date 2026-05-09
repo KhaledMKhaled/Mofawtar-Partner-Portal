@@ -65,7 +65,7 @@ interface Customer360 {
     createdAt: string;
     byUserName: string | null;
   }[];
-  audit: { id: number; action: string; createdAt: string; note: string | null; userName: string | null }[];
+  audit: { id: number; action: string; createdAt: string; note: string | null; userName: string | null; requestId: number | null }[];
 }
 
 export function Customer360Page() {
@@ -233,14 +233,32 @@ export function Customer360Page() {
           <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("nav.audit_log")}</h3>
           <ul className="space-y-3 text-sm">
             {audit.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
-            {audit.map((a) => (
-              <li key={a.id} className="border-s-2 border-violet-200 ps-3">
-                <div className="text-xs text-muted">{new Date(a.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
-                <div className="font-medium">{a.action}</div>
-                {a.userName && <div className="text-xs text-muted">{a.userName}</div>}
-                {a.note && <div className="text-xs italic">{a.note}</div>}
-              </li>
-            ))}
+            {audit.map((a) => {
+              const req = a.requestId ? requests.find((r) => r.id === a.requestId) : null;
+              const isCreation = a.action === "request.draft_created";
+              const onBehalf =
+                isCreation && req?.salesName && a.userName && a.userName !== req.salesName
+                  ? req.salesName
+                  : null;
+              return (
+                <li key={a.id} className="border-s-2 border-violet-200 ps-3">
+                  <div className="text-xs text-muted">{new Date(a.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
+                  <div className="font-medium">{a.action}</div>
+                  {a.userName && (
+                    <div className="text-xs text-muted">
+                      {a.userName}
+                      {onBehalf && (
+                        <span>
+                          {" · "}
+                          {t("requests.onBehalfOf")} <span className="font-semibold text-ink">{onBehalf}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {a.note && <div className="text-xs italic">{a.note}</div>}
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>

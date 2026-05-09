@@ -185,6 +185,7 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
       createdAt: auditLog.createdAt,
       note: auditLog.note,
       userName: users.name,
+      requestId: auditLog.requestId,
     })
     .from(auditLog)
     .leftJoin(users, eq(users.id, auditLog.userId))
