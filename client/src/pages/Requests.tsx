@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import { RequestWizard } from "../components/RequestWizard";
+import { Modal } from "../components/Modal";
+import { Field } from "../components/Field";
 import { useCurrentUser, can } from "../hooks/useAuth";
-import { REQUEST_STATUSES, OPERATION_TYPES } from "../../../shared/requests";
+import {
+  REQUEST_STATUSES,
+  OPERATION_TYPES,
+  ALLOWED_TRANSITIONS,
+  type RequestStatus,
+} from "../../../shared/requests";
 
 interface Row {
   id: number;
@@ -26,9 +33,14 @@ interface Row {
   activatedAt: string | null;
 }
 
+// All statuses that may appear as a transition target across the
+// non-terminal source statuses. Server enforces per-row validity.
+const BULK_TARGETS: RequestStatus[] = ["received", "under_activation", "activated", "failed", "rejected"];
+
 export function RequestsPage() {
   const { t } = useTranslation();
   const { data: user } = useCurrentUser();
+  const qc = useQueryClient();
   const [status, setStatus] = useState("");
   const [operationType, setOperationType] = useState("");
   const [q, setQ] = useState("");
@@ -38,6 +50,14 @@ export function RequestsPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Bulk-selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkTo, setBulkTo] = useState<RequestStatus | "">("");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkSummary, setBulkSummary] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
   const partnersQ = useQuery({
@@ -70,6 +90,101 @@ export function RequestsPage() {
       return api<Row[]>(`/api/requests?${p.toString()}`);
     },
   });
+
+  const canChangeStatus = can(user, "requests:change_status");
+  const rows = list.data ?? [];
+
+  // Whenever the visible rows change (filters, refetch, status changes after
+  // a bulk update), prune the selection so it can never contain ids that the
+  // user can no longer see. This keeps the action-bar count, the select-all
+  // indeterminate state, and the modal's eligibility list all consistent
+  // with the request payload that will actually be sent.
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const visible = new Set(rows.map((r) => r.id));
+    let changed = false;
+    const next = new Set<number>();
+    for (const id of selectedIds) {
+      if (visible.has(id)) next.add(id);
+      else changed = true;
+    }
+    if (changed) setSelectedIds(next);
+  }, [rows, selectedIds]);
+
+  // Restrict the bulk-target options to the INTERSECTION of allowed
+  // transitions across every selected row. Showing a target that only
+  // applies to some rows would guarantee partial failures, so we only
+  // surface targets every selected row supports. The server still
+  // validates per-row defensively.
+  const eligibleTargets = useMemo<RequestStatus[]>(() => {
+    if (selectedIds.size === 0) return [];
+    const selectedRows = rows.filter((r) => selectedIds.has(r.id));
+    if (selectedRows.length === 0) return [];
+    let intersection: Set<RequestStatus> | null = null;
+    for (const r of selectedRows) {
+      const allowed = new Set<RequestStatus>(ALLOWED_TRANSITIONS[r.status as RequestStatus] ?? []);
+      if (intersection === null) intersection = allowed;
+      else for (const s of intersection) if (!allowed.has(s)) intersection.delete(s);
+      if (intersection.size === 0) break;
+    }
+    return BULK_TARGETS.filter((s) => intersection?.has(s));
+  }, [rows, selectedIds]);
+
+  const toggleAll = (checked: boolean) => {
+    if (!checked) { setSelectedIds(new Set()); return; }
+    setSelectedIds(new Set(rows.map((r) => r.id)));
+  };
+  const toggleOne = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+  const allChecked = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
+  const someChecked = selectedIds.size > 0 && !allChecked;
+
+  const bulkMut = useMutation({
+    mutationFn: (payload: { ids: number[]; toStatus: RequestStatus; reason: string | null }) =>
+      api<{ total: number; succeeded: number; failed: number; results: { id: number; ok: boolean; error?: string }[] }>(
+        "/api/requests/bulk-transition",
+        { method: "POST", json: payload },
+      ),
+  });
+
+  const openBulk = () => {
+    setBulkTo("");
+    setBulkReason("");
+    setBulkSummary(null);
+    setBulkError(null);
+    setBulkOpen(true);
+  };
+  const closeBulk = () => {
+    setBulkOpen(false);
+    setBulkSummary(null);
+    setBulkError(null);
+  };
+  const runBulk = async () => {
+    setBulkError(null);
+    setBulkSummary(null);
+    if (!bulkTo) return;
+    if ((bulkTo === "failed" || bulkTo === "rejected") && !bulkReason.trim()) {
+      setBulkError("reason_required");
+      return;
+    }
+    try {
+      const ids = Array.from(selectedIds);
+      const r = await bulkMut.mutateAsync({ ids, toStatus: bulkTo, reason: bulkReason.trim() || null });
+      setBulkSummary(t("requests.bulkResult", { succeeded: r.succeeded, total: r.total, failed: r.failed }));
+      qc.invalidateQueries({ queryKey: ["requests"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      // Drop ids that succeeded so a retry only targets the failures.
+      const failedIds = new Set(r.results.filter((x) => !x.ok).map((x) => x.id));
+      setSelectedIds(failedIds);
+    } catch (e) {
+      setBulkError(e instanceof ApiError ? (typeof e.body === "object" && e.body?.error) || e.message : String(e));
+    }
+  };
 
   return (
     <div>
@@ -118,10 +233,36 @@ export function RequestsPage() {
         <input type="date" className="input" value={toDate} onChange={(e) => setToDate(e.target.value)} title={t("requests.toDate")} />
       </div>
 
+      {canChangeStatus && selectedIds.size > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
+          <div className="text-violet-800">{t("requests.selectedCount", { count: selectedIds.size })}</div>
+          <div className="flex items-center gap-2">
+            <button className="btn-primary !py-1 !px-3 text-xs" onClick={openBulk}>
+              {t("requests.bulkUpdateStatus")}
+            </button>
+            <button className="btn-ghost !py-1 !px-2 text-xs inline-flex items-center gap-1" onClick={() => setSelectedIds(new Set())}>
+              <X className="w-3.5 h-3.5" />
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
+              {canChangeStatus && (
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="select-all"
+                    checked={allChecked}
+                    ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                    onChange={(e) => toggleAll(e.target.checked)}
+                  />
+                </th>
+              )}
               <th>{t("requests.sr")}</th>
               <th>{t("common.status")}</th>
               <th>{t("requests.customer")}</th>
@@ -134,10 +275,20 @@ export function RequestsPage() {
             </tr>
           </thead>
           <tbody>
-            {list.isLoading && <tr><td colSpan={9} className="text-center text-muted py-8">{t("common.loading")}</td></tr>}
-            {list.data?.length === 0 && <tr><td colSpan={9} className="text-center text-muted py-8">{t("common.noData")}</td></tr>}
+            {list.isLoading && <tr><td colSpan={canChangeStatus ? 10 : 9} className="text-center text-muted py-8">{t("common.loading")}</td></tr>}
+            {list.data?.length === 0 && <tr><td colSpan={canChangeStatus ? 10 : 9} className="text-center text-muted py-8">{t("common.noData")}</td></tr>}
             {list.data?.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className={selectedIds.has(r.id) ? "bg-violet-50/40" : ""}>
+                {canChangeStatus && (
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`select-${r.id}`}
+                      checked={selectedIds.has(r.id)}
+                      onChange={(e) => toggleOne(r.id, e.target.checked)}
+                    />
+                  </td>
+                )}
                 <td className="font-mono text-xs"><Link to={`/requests/${r.id}`} className="text-violet-700 hover:underline">{r.srNumber}</Link></td>
                 <td><span className={requestPill(r.status)}>{t(`requests.statuses.${r.status}`)}</span></td>
                 <td>
@@ -157,6 +308,50 @@ export function RequestsPage() {
       </div>
 
       <RequestWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+
+      <Modal
+        open={bulkOpen}
+        onClose={closeBulk}
+        title={t("requests.bulkUpdateStatus")}
+        footer={
+          <>
+            <button className="btn-ghost" onClick={closeBulk} disabled={bulkMut.isPending}>{t("common.cancel")}</button>
+            <button className="btn-primary" onClick={runBulk} disabled={!bulkTo || bulkMut.isPending}>
+              {bulkMut.isPending ? t("common.loading") : t("common.save")}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="text-sm text-muted">
+            {t("requests.selectedCount", { count: selectedIds.size })}
+          </div>
+          <Field label={t("requests.newStatus")} required>
+            <select className="input" value={bulkTo} onChange={(e) => setBulkTo(e.target.value as RequestStatus)}>
+              <option value="">—</option>
+              {eligibleTargets.map((s) => <option key={s} value={s}>{t(`requests.statuses.${s}`)}</option>)}
+            </select>
+          </Field>
+          {eligibleTargets.length === 0 && (
+            <div className="text-xs text-amber-700">{t("requests.bulkNoEligible")}</div>
+          )}
+          <Field
+            label={t("requests.reason")}
+            required={bulkTo === "failed" || bulkTo === "rejected"}
+            hint={bulkTo === "failed" || bulkTo === "rejected" ? t("requests.reasonRequired") : ""}
+          >
+            <textarea className="input" rows={3} value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} />
+          </Field>
+          {bulkSummary && (
+            <div className="rounded-lg bg-emerald-50 text-emerald-800 px-3 py-2 text-xs">{bulkSummary}</div>
+          )}
+          {bulkError && (
+            <div className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-xs">
+              {t(`wizard.errors.${bulkError}`, { defaultValue: bulkError })}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

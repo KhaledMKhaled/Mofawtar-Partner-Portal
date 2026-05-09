@@ -757,6 +757,116 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
   res.json(updated);
 });
 
+// ---------- Bulk status transition ----------
+// Apply the same transition to many requests at once. Each request is
+// validated independently (transition rules, partner scope, reason
+// requirements, financial bootstrap) inside its own transaction so a
+// failure on one row never poisons the rest. The response reports a
+// per-id result so the client can show a clear summary.
+
+const bulkTransitionInput = z.object({
+  ids: z.array(z.coerce.number().int()).min(1).max(200),
+  toStatus: z.enum(["received", "under_activation", "activated", "failed", "rejected"]),
+  reason: z.string().optional().nullable(),
+});
+
+requestsRouter.post("/bulk-transition", requirePerm("requests:change_status"), async (req, res) => {
+  const parsed = bulkTransitionInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
+  const cu = getUser(req)!;
+  const to = parsed.data.toStatus as RequestStatus;
+  const needsReason = to === "failed" || to === "rejected";
+  // Trim authoritatively so a whitespace-only reason can never satisfy the
+  // failed/rejected requirement via direct API calls.
+  const reason = parsed.data.reason ? parsed.data.reason.trim() : "";
+  if (needsReason && !reason) return res.status(400).json({ error: "reason_required" });
+
+  const results: { id: number; ok: boolean; error?: string; from?: string }[] = [];
+
+  for (const id of parsed.data.ids) {
+    try {
+      const [old] = await db.select().from(requests).where(eq(requests.id, id));
+      if (!old) { results.push({ id, ok: false, error: "not_found" }); continue; }
+      if (partnerScoped(cu) && old.partnerId !== cu.partnerId) {
+        results.push({ id, ok: false, error: "forbidden" }); continue;
+      }
+      const from = old.status as RequestStatus;
+      if (!isAllowedTransition(from, to)) {
+        results.push({ id, ok: false, from, error: "invalid_transition" }); continue;
+      }
+
+      const update: Partial<typeof requests.$inferInsert> = { status: to, updatedAt: new Date() };
+      if (to === "activated") update.activatedAt = new Date();
+      if (needsReason) update.rejectionReason = reason || null;
+
+      try {
+        await db.transaction(async (tx) => {
+          await tx.update(requests).set(update).where(eq(requests.id, id));
+          await tx.insert(requestStatusHistory).values({
+            requestId: id,
+            fromStatus: from,
+            toStatus: to,
+            reason: reason || null,
+            changedByUserId: cu.id,
+          });
+          await audit({
+            userId: cu.id,
+            action: `request.${to}`,
+            entityType: "request",
+            entityId: id,
+            requestId: id,
+            customerId: old.customerId,
+            partnerId: old.partnerId,
+            oldValue: { status: from },
+            newValue: { status: to, reason: reason || null },
+          });
+          if (to === "activated") {
+            const had = await tx
+              .select({ id: customerOwnership.id })
+              .from(customerOwnership)
+              .where(and(eq(customerOwnership.customerId, old.customerId), eq(customerOwnership.partnerId, old.partnerId)))
+              .limit(1);
+            if (had.length === 0) {
+              await startOwnership({ customerId: old.customerId, partnerId: old.partnerId, userId: cu.id }, tx);
+            }
+            const { onRequestActivated } = await import("../financial.js");
+            await onRequestActivated({ requestId: id, userId: cu.id }, tx);
+          }
+        });
+      } catch (e: unknown) {
+        results.push({
+          id,
+          ok: false,
+          from,
+          error: to === "activated" ? "activation_failed" : (e instanceof Error ? e.message : String(e)),
+        });
+        continue;
+      }
+
+      try {
+        await notifyRequestStatus(
+          id,
+          `request.${to}` as
+            | "request.received"
+            | "request.under_activation"
+            | "request.activated"
+            | "request.failed"
+            | "request.rejected",
+          old.partnerId,
+          old.customerId,
+        );
+      } catch { /* non-fatal: request is updated */ }
+
+      results.push({ id, ok: true, from });
+    } catch (e: unknown) {
+      results.push({ id, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  const succeeded = results.filter((r) => r.ok).length;
+  res.json({ total: results.length, succeeded, failed: results.length - succeeded, results });
+});
+
 // ---------- Reopen ----------
 
 const reopenInput = z.object({
