@@ -82,6 +82,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     ...view("requests", "customers", "partners", "packages", "ownership", "audit_log"),
     "requests:change_status",
     "requests:reopen",
+    "excel_import:view",
     "excel_import:import",
     "audit_log:view",
     "reports:view",

@@ -399,6 +399,7 @@ export const ar: Translations = {
     notes: "ملاحظات",
     noEligible: "لا توجد عمولات مؤهلة لهذا الشريك.",
     createManual: "إنشاء مطالبة ({{count}})",
+    settle: "تسوية المطالبة",
   },
   payoutBatches: {
     subtitle: "تجميع عمولات المبيعات لصرفها وفق الدورة.",

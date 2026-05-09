@@ -183,6 +183,10 @@ export function ClaimDetailPage() {
     mutationFn: (reason: string) => api(`/api/claims/${id}/reject`, { method: "POST", json: { reason } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["claim", id] }),
   });
+  const settle = useMutation({
+    mutationFn: () => api(`/api/claims/${id}/settle`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["claim", id] }),
+  });
   if (detail.isLoading || !detail.data) return <div className="text-center text-muted py-12">{t("common.loading")}</div>;
   const { claim, items } = detail.data;
   const isCompanyAcct = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
@@ -193,13 +197,14 @@ export function ClaimDetailPage() {
         title={`${t("claims.number")} ${claim.claimNumber}`}
         subtitle={`${t("common.partner")} #${claim.partnerId}`}
         actions={
-          isCompanyAcct && claim.status === "draft" ? (
+          isCompanyAcct ? (
             <div className="flex gap-2">
-              <button className="btn-primary" onClick={() => approve.mutate()}>{t("claims.approve")}</button>
-              <button className="btn-ghost text-red-700" onClick={() => {
+              {claim.status === "draft" && <button className="btn-primary" onClick={() => approve.mutate()}>{t("claims.approve")}</button>}
+              {claim.status === "draft" && <button className="btn-ghost text-red-700" onClick={() => {
                 const r = prompt(t("requests.reason") as string);
                 if (r) reject.mutate(r);
-              }}>{t("claims.reject")}</button>
+              }}>{t("claims.reject")}</button>}
+              {claim.status === "approved" && <button className="btn-primary" onClick={() => settle.mutate()} disabled={settle.isPending}>{t("claims.settle")}</button>}
             </div>
           ) : null
         }

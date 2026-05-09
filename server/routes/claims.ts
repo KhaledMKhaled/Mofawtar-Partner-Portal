@@ -6,7 +6,7 @@ import {
   claims, claimItems, partnerCommissions, partners, customers, packages, users,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
-import { createClaim, approveClaim, rejectClaim } from "../financial.js";
+import { createClaim, approveClaim, rejectClaim, createSettlement } from "../financial.js";
 
 export const claimsRouter = Router();
 
@@ -124,6 +124,27 @@ claimsRouter.post("/:id/approve", requirePerm("claims:approve"), async (req, res
   try {
     await approveClaim(Number(req.params.id), cu.id);
     res.json({ ok: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(409).json({ error: msg });
+  }
+});
+
+claimsRouter.post("/:id/settle", requirePerm("claims:approve"), async (req, res) => {
+  // Explicit "Settle claim" lifecycle action: creates a settlement bound
+  // to this claim, advancing the claim's partner commissions through
+  // ready_for_settlement -> settled_successfully and marking the claim
+  // as settled. Mirrors the implicit settlement creation path so the
+  // UI can offer a one-click settle button.
+  const cu = getUser(req)!;
+  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
+  const id = Number(req.params.id);
+  const [c] = await db.select().from(claims).where(eq(claims.id, id));
+  if (!c) return res.status(404).json({ error: "not_found" });
+  if (c.status !== "approved") return res.status(409).json({ error: "claim_not_approved" });
+  try {
+    const result = await createSettlement({ partnerId: c.partnerId, claimId: id, userId: cu.id, notes: (req.body?.notes as string | undefined) });
+    res.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     res.status(409).json({ error: msg });

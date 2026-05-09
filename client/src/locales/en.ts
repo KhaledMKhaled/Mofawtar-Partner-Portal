@@ -397,6 +397,7 @@ export const en = {
     notes: "Notes",
     noEligible: "No eligible commissions for this partner.",
     createManual: "Create claim ({{count}})",
+    settle: "Settle claim",
   },
   payoutBatches: {
     subtitle: "Batches that group sales commissions for cycle-based payout.",
