@@ -84,18 +84,94 @@ ownershipRouter.post("/:id/extend", requirePerm("ownership:manage"), async (req,
   const cu = getUser(req)!;
   const [old] = await db.select().from(customerOwnership).where(eq(customerOwnership.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
+  // Preconditions: only the current owner of this customer may be extended,
+  // and only while still active or already extended.
+  if (old.status !== "active" && old.status !== "extended") {
+    return res.status(409).json({ error: "not_extendable", status: old.status });
+  }
+  const current = await getOwnerAt(old.customerId);
+  if (!current || current.id !== old.id) {
+    return res.status(409).json({ error: "not_current_owner" });
+  }
   let newEnd: Date;
   if (parsed.data.newEndDate) newEnd = new Date(parsed.data.newEndDate);
   else if (parsed.data.extendByDays) newEnd = new Date(old.endDate.getTime() + parsed.data.extendByDays * 86400000);
   else return res.status(400).json({ error: "extension_required" });
-  const [updated] = await db
+  if (newEnd <= old.endDate) return res.status(400).json({ error: "extension_must_be_future" });
+  // Append-only history: close the existing window and insert a continuation
+  // row covering the extended period.
+  await db
     .update(customerOwnership)
-    .set({ endDate: newEnd, status: "extended", reason: parsed.data.reason })
-    .where(eq(customerOwnership.id, id))
+    .set({ status: "extended", reason: parsed.data.reason })
+    .where(eq(customerOwnership.id, id));
+  const [created] = await db
+    .insert(customerOwnership)
+    .values({
+      customerId: old.customerId,
+      partnerId: old.partnerId,
+      startDate: old.endDate,
+      endDate: newEnd,
+      status: "extended",
+      reason: parsed.data.reason,
+      createdByUserId: cu.id,
+    })
     .returning();
   await audit({
     userId: cu.id,
     action: "ownership.extended",
+    entityType: "ownership",
+    entityId: created.id,
+    customerId: old.customerId,
+    partnerId: old.partnerId ?? undefined,
+    oldValue: old,
+    newValue: created,
+    note: parsed.data.reason,
+  });
+  if (old.partnerId) {
+    const admins = await db
+      .select({ id: users.id })
+      .from(users)
+      .innerJoin(sql`roles r`, sql`r.id = ${users.roleId}`)
+      .where(sql`${users.partnerId} = ${old.partnerId} AND r.key = 'partner_admin'`);
+    for (const a of admins) {
+      await notify({
+        userId: a.id,
+        type: "ownership.extended",
+        titleEn: "Ownership extended",
+        titleAr: "تم تمديد ملكية العميل",
+        entityType: "customer",
+        entityId: old.customerId,
+        linkPath: `/customers/${old.customerId}`,
+      });
+    }
+  }
+  res.json(created);
+});
+
+// Return ownership to the company (e.g. partner contract ended early).
+const returnInput = z.object({ reason: z.string().min(2) });
+ownershipRouter.post("/:id/return", requirePerm("ownership:manage"), async (req, res) => {
+  const id = Number(req.params.id);
+  const parsed = returnInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
+  const cu = getUser(req)!;
+  const [old] = await db.select().from(customerOwnership).where(eq(customerOwnership.id, id));
+  if (!old) return res.status(404).json({ error: "not_found" });
+  if (old.status !== "active" && old.status !== "extended") {
+    return res.status(409).json({ error: "not_returnable", status: old.status });
+  }
+  const current = await getOwnerAt(old.customerId);
+  if (!current || current.id !== old.id) {
+    return res.status(409).json({ error: "not_current_owner" });
+  }
+  const [updated] = await db
+    .update(customerOwnership)
+    .set({ status: "returned_to_company", endDate: new Date(), reason: parsed.data.reason })
+    .where(eq(customerOwnership.id, id))
+    .returning();
+  await audit({
+    userId: cu.id,
+    action: "ownership.returned",
     entityType: "ownership",
     entityId: id,
     customerId: old.customerId,
@@ -105,13 +181,17 @@ ownershipRouter.post("/:id/extend", requirePerm("ownership:manage"), async (req,
     note: parsed.data.reason,
   });
   if (old.partnerId) {
-    const admins = await db.select({ id: users.id }).from(users).where(eq(users.partnerId, old.partnerId));
+    const admins = await db
+      .select({ id: users.id })
+      .from(users)
+      .innerJoin(sql`roles r`, sql`r.id = ${users.roleId}`)
+      .where(sql`${users.partnerId} = ${old.partnerId} AND r.key = 'partner_admin'`);
     for (const a of admins) {
       await notify({
         userId: a.id,
-        type: "ownership.extended",
-        titleEn: "Ownership extended",
-        titleAr: "تم تمديد ملكية العميل",
+        type: "ownership.returned",
+        titleEn: "Ownership returned to company",
+        titleAr: "تمت إعادة ملكية العميل للشركة",
         entityType: "customer",
         entityId: old.customerId,
         linkPath: `/customers/${old.customerId}`,
@@ -133,6 +213,13 @@ ownershipRouter.post("/:id/transfer", requirePerm("ownership:manage"), async (re
   const cu = getUser(req)!;
   const [old] = await db.select().from(customerOwnership).where(eq(customerOwnership.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
+  if (old.status !== "active" && old.status !== "extended") {
+    return res.status(409).json({ error: "not_transferable", status: old.status });
+  }
+  const current = await getOwnerAt(old.customerId);
+  if (!current || current.id !== old.id) {
+    return res.status(409).json({ error: "not_current_owner" });
+  }
   const [toPartner] = await db.select().from(partners).where(eq(partners.id, parsed.data.toPartnerId));
   if (!toPartner) return res.status(400).json({ error: "invalid_partner" });
   if (toPartner.id === old.partnerId) return res.status(400).json({ error: "same_partner" });

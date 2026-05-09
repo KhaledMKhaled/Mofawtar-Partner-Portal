@@ -38,7 +38,7 @@ export function OwnershipPage() {
     enabled: can(user, "ownership:manage"),
   });
 
-  const [action, setAction] = useState<"" | "extend" | "transfer">("");
+  const [action, setAction] = useState<"" | "extend" | "transfer" | "return">("");
   const [target, setTarget] = useState<Row | null>(null);
   const [reason, setReason] = useState("");
   const [extendByDays, setExtendByDays] = useState(30);
@@ -50,6 +50,9 @@ export function OwnershipPage() {
   });
   const transfer = useMutation({
     mutationFn: () => api(`/api/ownership/${target!.id}/transfer`, { method: "POST", json: { reason, toPartnerId } }),
+  });
+  const returnToCo = useMutation({
+    mutationFn: () => api(`/api/ownership/${target!.id}/return`, { method: "POST", json: { reason } }),
   });
 
   const close = () => {
@@ -65,6 +68,7 @@ export function OwnershipPage() {
     try {
       if (action === "extend") await extend.mutateAsync();
       else if (action === "transfer") await transfer.mutateAsync();
+      else if (action === "return") await returnToCo.mutateAsync();
       qc.invalidateQueries({ queryKey: ["ownership"] });
       close();
     } catch (e) {
@@ -118,6 +122,9 @@ export function OwnershipPage() {
                         <button className="btn-ghost text-xs" onClick={() => { setTarget(r); setAction("transfer"); }}>
                           {t("ownership.transfer")}
                         </button>
+                        <button className="btn-ghost text-xs" onClick={() => { setTarget(r); setAction("return"); }}>
+                          {t("ownership.return")}
+                        </button>
                       </>
                     )}
                   </td>
@@ -131,11 +138,11 @@ export function OwnershipPage() {
       <Modal
         open={!!action}
         onClose={close}
-        title={action === "extend" ? t("ownership.extend") : t("ownership.transfer")}
+        title={action === "extend" ? t("ownership.extend") : action === "transfer" ? t("ownership.transfer") : t("ownership.return")}
         footer={
           <>
             <button className="btn-outline" onClick={close}>{t("common.cancel")}</button>
-            <button className="btn-primary" disabled={extend.isPending || transfer.isPending} onClick={run}>{t("common.confirm")}</button>
+            <button className="btn-primary" disabled={extend.isPending || transfer.isPending || returnToCo.isPending} onClick={run}>{t("common.confirm")}</button>
           </>
         }
       >
@@ -145,6 +152,13 @@ export function OwnershipPage() {
             <Field label={t("ownership.extendByDays")} required>
               <input type="number" className="input" value={extendByDays} onChange={(e) => setExtendByDays(Number(e.target.value))} />
             </Field>
+            <Field label={t("requests.reason")} required>
+              <textarea className="input" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </Field>
+          </div>
+        )}
+        {action === "return" && (
+          <div className="space-y-3">
             <Field label={t("requests.reason")} required>
               <textarea className="input" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
             </Field>

@@ -248,6 +248,7 @@ export const en = {
     extend: "Extend",
     extendByDays: "Extend by (days)",
     transfer: "Transfer",
+    return: "Return to company",
     toPartner: "Transfer to partner",
     activeCount: "Active",
     expiredCount: "Expired",

@@ -250,6 +250,7 @@ export const ar: Translations = {
     extend: "تمديد",
     extendByDays: "تمديد بعدد أيام",
     transfer: "نقل",
+    return: "إعادة إلى الشركة",
     toPartner: "نقل إلى شريك",
     activeCount: "نشط",
     expiredCount: "منتهٍ",
