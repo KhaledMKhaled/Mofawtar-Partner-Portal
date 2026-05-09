@@ -68,11 +68,14 @@ export function RequestWizard({
   const qc = useQueryClient();
   const navigate = useNavigate();
 
+  const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [tax, setTax] = useState("");
   const [lookup, setLookup] = useState<LookupResp | null>(null);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const [customer, setCustomer] = useState<Customer>(blankCustomer);
+  const [wizardPartnerId, setWizardPartnerId] = useState<number | null>(null);
   const [salesUserId, setSalesUserId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DraftResp | null>(null);
   const [packageId, setPackageId] = useState<number | null>(null);
@@ -87,6 +90,7 @@ export function RequestWizard({
     setLookup(null);
     setLookupErr(null);
     setCustomer(blankCustomer);
+    setWizardPartnerId(null);
     setSalesUserId(null);
     setDraft(null);
     setPackageId(null);
@@ -103,6 +107,12 @@ export function RequestWizard({
     queryKey: ["packages"],
     queryFn: () => api<Pkg[]>("/api/packages"),
     enabled: open,
+  });
+
+  const partnersQ = useQuery({
+    queryKey: ["partners-min"],
+    queryFn: () => api<{ id: number; name: string }[]>("/api/partners?minimal=1"),
+    enabled: open && isCompany,
   });
 
   const teamMembers = useQuery({
@@ -123,6 +133,7 @@ export function RequestWizard({
         json: {
           customer: { ...customer, taxCardNumber: tax },
           salesUserId: salesUserId ?? undefined,
+          partnerId: wizardPartnerId ?? undefined,
         },
       }),
   });
@@ -198,7 +209,7 @@ export function RequestWizard({
           {step === 2 && (
             <button
               className="btn-primary"
-              disabled={!customer.name || draftMut.isPending}
+              disabled={!customer.name || (isCompany && !wizardPartnerId) || draftMut.isPending}
               onClick={async () => {
                 setError(null);
                 try {
@@ -305,6 +316,20 @@ export function RequestWizard({
             <Field label={t("common.address")} className="md:col-span-2">
               <input className="input" value={customer.address ?? ""} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
             </Field>
+            {isCompany && (
+              <Field label={t("common.partner")} required>
+                <select
+                  className="input"
+                  value={wizardPartnerId ?? ""}
+                  onChange={(e) => setWizardPartnerId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{t("wizard.selectPartner")}</option>
+                  {partnersQ.data?.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
             {(user?.roleKey === "team_leader" || user?.roleKey === "partner_admin") && (
               <Field label={t("wizard.assignSales")} required={user?.roleKey === "team_leader"}>
                 <select

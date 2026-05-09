@@ -291,6 +291,7 @@ export const ar: Translations = {
     srNumber: "رقم الطلب",
     assignSales: "إسناد إلى مندوب",
     selectSales: "اختر مندوب…",
+    selectPartner: "اختر الشريك…",
     selectPackage: "اختر الباقة…",
     selectOperation: "اختر نوع العملية…",
     steps: {

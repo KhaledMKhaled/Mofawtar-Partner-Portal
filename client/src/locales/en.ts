@@ -289,6 +289,7 @@ export const en = {
     srNumber: "SR number",
     assignSales: "Assign sales rep",
     selectSales: "Select sales rep…",
+    selectPartner: "Select partner…",
     selectPackage: "Select package…",
     selectOperation: "Select operation type…",
     steps: {
