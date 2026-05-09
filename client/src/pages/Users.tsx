@@ -77,16 +77,21 @@ export function UsersPage() {
     queryFn: () => api<Partner[]>("/api/partners"),
     enabled: me?.roleKey === "company_super_admin",
   });
-  const tlQ = useQuery({
-    queryKey: ["team-leaders", me?.partnerId],
-    queryFn: () => api<{ id: number; name: string }[]>("/api/users/team-leaders"),
-    enabled: !!me?.partnerId,
-  });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState<UserForm>(blank);
   const [error, setError] = useState<string | null>(null);
+
+  // For partner-scoped users use their own partnerId; for company super admin
+  // use whichever partner is currently selected in the form so the team-leader
+  // dropdown is scoped to that partner.
+  const tlPartnerId = me?.partnerId ?? form.partnerId;
+  const tlQ = useQuery({
+    queryKey: ["team-leaders", tlPartnerId],
+    queryFn: () => api<{ id: number; name: string }[]>(`/api/users/team-leaders?partnerId=${tlPartnerId}`),
+    enabled: !!tlPartnerId,
+  });
 
   const create = useMutation({
     mutationFn: (data: Record<string, unknown>) => api("/api/users", { method: "POST", json: data }),
@@ -234,13 +239,13 @@ export function UsersPage() {
           {showPartner && (
             <Field label={t("common.partner")} required>
               <select className="input" value={form.partnerId ?? ""}
-                onChange={(e) => setForm({ ...form, partnerId: e.target.value ? Number(e.target.value) : null })}>
+                onChange={(e) => setForm({ ...form, partnerId: e.target.value ? Number(e.target.value) : null, teamLeaderId: null })}>
                 <option value="">—</option>
                 {partnersQ.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
           )}
-          {showTeamLeader && (tlQ.data?.length ?? 0) > 0 && (
+          {showTeamLeader && !!tlPartnerId && (tlQ.data?.length ?? 0) > 0 && (
             <Field label={t("users.teamLeader")}>
               <select className="input" value={form.teamLeaderId ?? ""}
                 onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}>
