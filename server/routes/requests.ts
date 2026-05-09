@@ -168,17 +168,22 @@ requestsRouter.get("/lookup/:tax", requirePerm("requests:view"), async (req, res
   if (inProgress.length > 0) {
     canCreate = false;
     blockReason = "duplicate_active_request";
-  } else if (partnerScoped(cu)) {
-    if (owner && owner.partnerId && owner.partnerId !== cu.partnerId &&
-      (owner.status === "active" || owner.status === "extended")) {
-      canCreate = false;
-      blockReason = "owned_by_other_partner";
-    } else if (latest && (latest.status === "expired" || latest.status === "returned_to_company")) {
-      // Customer has been released back to the company — partner users
-      // cannot create a new request without a company action.
-      canCreate = false;
-      blockReason = "owned_by_company_only";
-    }
+  } else if (
+    owner && owner.partnerId &&
+    (owner.status === "active" || owner.status === "extended") &&
+    owner.partnerId !== cu.partnerId
+  ) {
+    // Active ownership by another partner blocks creation for ALL roles.
+    canCreate = false;
+    blockReason = "owned_by_other_partner";
+  } else if (
+    partnerScoped(cu) &&
+    latest && (latest.status === "expired" || latest.status === "returned_to_company")
+  ) {
+    // Released back to the company — partner users cannot create without a
+    // company action; company users may proceed.
+    canCreate = false;
+    blockReason = "owned_by_company_only";
   }
 
   // Partner-scoped users may not see PII for customers they don't own and have
@@ -281,14 +286,19 @@ requestsRouter.post("/draft", requirePerm("requests:create"), async (req, res) =
     if (inProgress.length > 0) return res.status(409).json({ error: "duplicate_active_request" });
     const owner = await getOwnerAt(existingCustomer.id);
     const latest = await getLatestOwnership(existingCustomer.id);
-    if (partnerScoped(cu)) {
-      if (owner && owner.partnerId && owner.partnerId !== cu.partnerId &&
-        (owner.status === "active" || owner.status === "extended")) {
-        return res.status(409).json({ error: "owned_by_other_partner" });
-      }
-      if (latest && (latest.status === "expired" || latest.status === "returned_to_company")) {
-        return res.status(409).json({ error: "owned_by_company_only" });
-      }
+    if (
+      owner && owner.partnerId &&
+      (owner.status === "active" || owner.status === "extended") &&
+      owner.partnerId !== partnerId
+    ) {
+      // Active ownership by another partner blocks creation for ALL roles.
+      return res.status(409).json({ error: "owned_by_other_partner" });
+    }
+    if (
+      partnerScoped(cu) &&
+      latest && (latest.status === "expired" || latest.status === "returned_to_company")
+    ) {
+      return res.status(409).json({ error: "owned_by_company_only" });
     }
   }
 
