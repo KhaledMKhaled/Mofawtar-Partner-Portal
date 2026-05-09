@@ -204,17 +204,38 @@ export function RequestDetailPage() {
         <div className="stamp-card p-5">
           <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("requests.timeline")}</h3>
           <ul className="space-y-3 text-sm">
-            {history.map((e) => (
-              <li key={e.id} className="border-s-2 border-violet-200 ps-3">
-                <div className="text-xs text-muted">{new Date(e.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
-                <div>
-                  {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
-                  {t(`requests.statuses.${e.toStatus}`)}
-                </div>
-                {e.userName && <div className="text-xs text-muted">{e.userName}</div>}
-                {e.reason && <div className="text-xs italic">{e.reason}</div>}
-              </li>
-            ))}
+            {history.map((e) => {
+              const isCreation = !e.fromStatus && e.toStatus === "draft_sr";
+              const onBehalf =
+                isCreation && request.salesName && e.userName && e.userName !== request.salesName
+                  ? request.salesName
+                  : null;
+              return (
+                <li key={e.id} className="border-s-2 border-violet-200 ps-3">
+                  <div className="text-xs text-muted">{new Date(e.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
+                  <div>
+                    {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
+                    {t(`requests.statuses.${e.toStatus}`)}
+                  </div>
+                  {e.userName && (
+                    <div className="text-xs text-muted">
+                      {e.userName}
+                      {onBehalf && (
+                        <span className="text-muted">
+                          {" · "}
+                          {t("requests.onBehalfOf")} <span className="font-semibold text-ink">{onBehalf}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* If creator is the sales rep themselves, still show their assignment for clarity */}
+                  {isCreation && e.userName && e.userName === request.salesName && (
+                    <div className="text-xs text-muted">{t("requests.assignedTo")}: <span className="text-ink">{request.salesName}</span></div>
+                  )}
+                  {e.reason && <div className="text-xs italic">{e.reason}</div>}
+                </li>
+              );
+            })}
           </ul>
           {reassignments.length > 0 && (
             <div className="mt-4">

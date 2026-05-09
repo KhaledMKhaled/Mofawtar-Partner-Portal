@@ -240,6 +240,8 @@ export const en = {
     reopenTarget: "Reopen to",
     reassign: "Reassign",
     reassignTo: "Reassign to",
+    onBehalfOf: "on behalf of",
+    assignedTo: "Assigned to",
     reassignScopeNotice: "Reassignment is restricted to active sales reps within the same partner and same team as the current assignee — this preserves commission accuracy.",
     noReassignCandidates: "No eligible sales reps available in this team.",
     collectionConfirmation: "Collection confirmation",

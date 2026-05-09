@@ -242,6 +242,8 @@ export const ar: Translations = {
     reopenTarget: "إعادة الفتح إلى",
     reassign: "إعادة إسناد",
     reassignTo: "إعادة الإسناد إلى",
+    onBehalfOf: "بالنيابة عن",
+    assignedTo: "مُسنَد إلى",
     reassignScopeNotice: "إعادة الإسناد متاحة فقط لمندوبي مبيعات نشطين داخل نفس الشريك وداخل نفس الفريق التابع له المندوب الحالي — وذلك للحفاظ على دقة العمولات والحسابات.",
     noReassignCandidates: "لا يوجد مندوبون مؤهلون للإسناد داخل هذا الفريق.",
     collectionConfirmation: "تأكيد التحصيل",
