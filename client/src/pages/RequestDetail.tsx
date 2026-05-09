@@ -9,6 +9,7 @@ import { Field } from "../components/Field";
 import { ArrowLeft } from "lucide-react";
 import { useCurrentUser, can } from "../hooks/useAuth";
 import { ALLOWED_TRANSITIONS, REOPEN_TARGETS, type RequestStatus } from "../../../shared/requests";
+import { RequestWizard } from "../components/RequestWizard";
 
 interface Detail {
   request: {
@@ -56,12 +57,10 @@ export function RequestDetailPage() {
   const [reason, setReason] = useState("");
   const [toSalesUserId, setToSalesUserId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const transition = useMutation({
     mutationFn: () => api(`/api/requests/${id}/transition`, { method: "POST", json: { toStatus, reason } }),
-  });
-  const submit = useMutation({
-    mutationFn: () => api(`/api/requests/${id}/submit`, { method: "POST" }),
   });
   const reopen = useMutation({
     mutationFn: () => api(`/api/requests/${id}/reopen`, { method: "POST", json: { toStatus, reason } }),
@@ -105,17 +104,6 @@ export function RequestDetailPage() {
     }
   };
 
-  const runSubmit = async () => {
-    setError(null);
-    try {
-      await submit.mutateAsync();
-      qc.invalidateQueries({ queryKey: ["request", id] });
-      qc.invalidateQueries({ queryKey: ["requests"] });
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-    } catch (e) {
-      setError(e instanceof ApiError ? (typeof e.body === "object" && e.body?.error) || e.message : String(e));
-    }
-  };
 
   return (
     <div>
@@ -130,10 +118,9 @@ export function RequestDetailPage() {
             {request.status === "draft_sr" && can(user, "requests:create") && (
               <button
                 className="btn-primary"
-                disabled={submit.isPending}
-                onClick={runSubmit}
+                onClick={() => setWizardOpen(true)}
               >
-                {submit.isPending ? t("common.loading") : t("requests.submitRequest")}
+                {t("requests.completeRequest")}
               </button>
             )}
             {request.status !== "draft_sr" && allowed.length > 0 && can(user, "requests:change_status") && (
@@ -306,6 +293,23 @@ export function RequestDetailPage() {
           </div>
         )}
       </Modal>
+
+      <RequestWizard
+        open={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          qc.invalidateQueries({ queryKey: ["request", id] });
+          qc.invalidateQueries({ queryKey: ["requests"] });
+          qc.invalidateQueries({ queryKey: ["notifications"] });
+        }}
+        initialDraft={{
+          requestId: request.id,
+          srNumber: request.srNumber,
+          taxCardNumber: request.taxCardNumber ?? "",
+          customerName: request.customerName ?? "",
+          partnerId: request.partnerId,
+        }}
+      />
     </div>
   );
 }

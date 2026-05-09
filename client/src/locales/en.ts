@@ -221,6 +221,7 @@ export const en = {
     reassigned: "Reassigned",
     changeStatus: "Change status",
     submitRequest: "Submit request",
+    completeRequest: "Complete request",
     newStatus: "New status",
     reason: "Reason",
     reasonRequired: "Reason is required for failed/rejected.",

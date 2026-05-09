@@ -223,6 +223,7 @@ export const ar: Translations = {
     reassigned: "تم إعادة الإسناد",
     changeStatus: "تغيير الحالة",
     submitRequest: "إرسال الطلب",
+    completeRequest: "إكمال الطلب",
     newStatus: "الحالة الجديدة",
     reason: "السبب",
     reasonRequired: "السبب مطلوب للفشل أو الرفض.",

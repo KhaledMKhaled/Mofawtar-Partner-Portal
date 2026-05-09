@@ -56,12 +56,22 @@ const blankCustomer: Customer = {
   notes: "",
 };
 
+export interface WizardInitialDraft {
+  requestId: number;
+  srNumber: string;
+  taxCardNumber: string;
+  customerName: string;
+  partnerId: number | null;
+}
+
 export function RequestWizard({
   open,
   onClose,
+  initialDraft,
 }: {
   open: boolean;
   onClose: () => void;
+  initialDraft?: WizardInitialDraft;
 }) {
   const { t } = useTranslation();
   const { data: user } = useCurrentUser();
@@ -84,15 +94,25 @@ export function RequestWizard({
   const [collectionConfirmed, setCollectionConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const minStep: 1 | 3 = initialDraft ? 3 : 1;
+
   const reset = () => {
-    setStep(1);
-    setTax("");
+    if (initialDraft) {
+      setStep(3);
+      setTax(initialDraft.taxCardNumber ?? "");
+      setCustomer({ ...blankCustomer, taxCardNumber: initialDraft.taxCardNumber ?? "", name: initialDraft.customerName ?? "" });
+      setWizardPartnerId(initialDraft.partnerId);
+      setDraft({ customer: { ...blankCustomer, taxCardNumber: initialDraft.taxCardNumber ?? "", name: initialDraft.customerName ?? "" }, request: { id: initialDraft.requestId, srNumber: initialDraft.srNumber } });
+    } else {
+      setStep(1);
+      setTax("");
+      setCustomer(blankCustomer);
+      setWizardPartnerId(null);
+      setDraft(null);
+    }
     setLookup(null);
     setLookupErr(null);
-    setCustomer(blankCustomer);
-    setWizardPartnerId(null);
     setSalesUserId(null);
-    setDraft(null);
     setPackageId(null);
     setOperationType("");
     setRealReceiptNumber("");
@@ -100,7 +120,8 @@ export function RequestWizard({
     setError(null);
   };
   useEffect(() => {
-    if (!open) reset();
+    if (open) reset();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const packages = useQuery({
@@ -178,7 +199,7 @@ export function RequestWizard({
           <button className="btn-outline" onClick={onClose}>
             {t("common.cancel")}
           </button>
-          {step > 1 && (
+          {step > minStep && (
             <button className="btn-ghost" onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3 | 4)}>
               <ArrowLeft className="w-4 h-4" /> {t("common.back")}
             </button>
