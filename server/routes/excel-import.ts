@@ -2,18 +2,20 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
-import { customers, packages } from "../schema.js";
+import { customers, packages, requests, orderPayments, partnerCommissions, salesCommissions } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { audit } from "../audit.js";
+import { ALLOWED_TRANSITIONS, REQUEST_STATUSES } from "../../shared/requests.js";
+import {
+  ORDER_PAYMENT_STATUSES, PARTNER_COMMISSION_STATUSES, SALES_COMMISSION_STATUSES,
+  type OrderPaymentStatus, type PartnerCommissionStatus, type SalesCommissionStatus,
+} from "../../shared/financial.js";
+import { transitionOrderPayment, transitionPartnerCommission, transitionSalesCommission } from "../financial.js";
 
 export const excelImportRouter = Router();
 
-// Bulk-update endpoint accepts an array of {entity, key, fields} rows after the
-// client has parsed an Excel/CSV file. Server-side parsing happens via xlsx in
-// the browser already; this endpoint is the safety net that validates and
-// applies the updates inside an audited transaction-like loop.
 const importInput = z.object({
-  entity: z.enum(["customers", "packages"]),
+  entity: z.enum(["customers", "packages", "requests", "order_payments", "partner_commissions", "sales_commissions"]),
   rows: z.array(z.record(z.unknown())).min(1).max(2000),
 });
 
@@ -63,6 +65,51 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       await db.update(packages).set(update).where(eq(packages.id, id));
       await audit({ userId: cu.id, action: "package.bulk_updated", entityType: "package", entityId: id, oldValue: existing, newValue: update });
       updated++;
+    }
+  } else if (parsed.data.entity === "requests") {
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i] as Record<string, unknown>;
+      const id = Number(r.id);
+      const toStatus = String(r.status ?? r.toStatus ?? "").trim();
+      if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
+      if (!REQUEST_STATUSES.includes(toStatus as typeof REQUEST_STATUSES[number])) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
+      const [existing] = await db.select().from(requests).where(eq(requests.id, id));
+      if (!existing) { failed++; failures.push({ row: i + 2, error: "not_found" }); continue; }
+      const allowed = ALLOWED_TRANSITIONS[existing.status as keyof typeof ALLOWED_TRANSITIONS] ?? [];
+      if (!allowed.includes(toStatus as never)) { failed++; failures.push({ row: i + 2, error: `transition_not_allowed_from_${existing.status}` }); continue; }
+      await db.update(requests).set({ status: toStatus, updatedAt: new Date() }).where(eq(requests.id, id));
+      await audit({ userId: cu.id, action: "request.bulk_status_change", entityType: "request", entityId: id, requestId: id, oldValue: { status: existing.status }, newValue: { status: toStatus } });
+      updated++;
+    }
+  } else if (parsed.data.entity === "order_payments") {
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i] as Record<string, unknown>;
+      const id = Number(r.id);
+      const toStatus = String(r.status ?? r.toStatus ?? "").trim() as OrderPaymentStatus;
+      if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
+      if (!ORDER_PAYMENT_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
+      const result = await transitionOrderPayment({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
+    }
+  } else if (parsed.data.entity === "partner_commissions") {
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i] as Record<string, unknown>;
+      const id = Number(r.id);
+      const toStatus = String(r.status ?? r.toStatus ?? "").trim() as PartnerCommissionStatus;
+      if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
+      if (!PARTNER_COMMISSION_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
+      const result = await transitionPartnerCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
+    }
+  } else if (parsed.data.entity === "sales_commissions") {
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i] as Record<string, unknown>;
+      const id = Number(r.id);
+      const toStatus = String(r.status ?? r.toStatus ?? "").trim() as SalesCommissionStatus;
+      if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
+      if (!SALES_COMMISSION_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
+      const result = await transitionSalesCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
     }
   }
 

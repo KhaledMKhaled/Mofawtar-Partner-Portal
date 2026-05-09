@@ -96,7 +96,7 @@ export function SettlementDetailPage() {
   const { t } = useTranslation();
   const detail = useQuery({
     queryKey: ["settlement", id],
-    queryFn: () => api<{ settlement: any; payments: any[]; commissions: any[] }>(`/api/settlements/${id}`),
+    queryFn: () => api<{ settlement: Row; payments: Array<{ id: number; grossAmount: string; netDueToCompany: string }>; commissions: Array<{ id: number; amount: string }> }>(`/api/settlements/${id}`),
     enabled: !!id,
   });
   if (!detail.data) return <div className="text-center text-muted py-12">{t("common.loading")}</div>;
@@ -115,7 +115,7 @@ export function SettlementDetailPage() {
         <table className="table">
           <thead><tr><th>#</th><th className="text-end">{t("payments.gross")}</th><th className="text-end">{t("payments.netDue")}</th></tr></thead>
           <tbody>
-            {payments.map((p: any) => <tr key={p.id}><td className="font-mono text-xs">{p.id}</td><td className="text-end font-mono">{fmtMoney(p.grossAmount)}</td><td className="text-end font-mono">{fmtMoney(p.netDueToCompany)}</td></tr>)}
+            {payments.map((p) => <tr key={p.id}><td className="font-mono text-xs">{p.id}</td><td className="text-end font-mono">{fmtMoney(p.grossAmount)}</td><td className="text-end font-mono">{fmtMoney(p.netDueToCompany)}</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -124,7 +124,7 @@ export function SettlementDetailPage() {
         <table className="table">
           <thead><tr><th>#</th><th className="text-end">{t("partnerCommissions.amount")}</th></tr></thead>
           <tbody>
-            {commissions.map((c: any) => <tr key={c.id}><td className="font-mono text-xs">{c.id}</td><td className="text-end font-mono text-violet-700">{fmtMoney(c.amount)}</td></tr>)}
+            {commissions.map((c) => <tr key={c.id}><td className="font-mono text-xs">{c.id}</td><td className="text-end font-mono text-violet-700">{fmtMoney(c.amount)}</td></tr>)}
           </tbody>
         </table>
       </div>

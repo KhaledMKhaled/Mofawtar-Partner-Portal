@@ -6,7 +6,7 @@ import { PageHeader } from "../components/AppShell";
 import { Upload } from "lucide-react";
 import * as XLSX from "xlsx";
 
-type Entity = "customers" | "packages";
+type Entity = "customers" | "packages" | "requests" | "order_payments" | "partner_commissions" | "sales_commissions";
 
 export function ExcelImportPage() {
   const { t } = useTranslation();
@@ -40,6 +40,10 @@ export function ExcelImportPage() {
             <select className="input" value={entity} onChange={(e) => { setEntity(e.target.value as Entity); setRows([]); setResult(null); }}>
               <option value="customers">{t("nav.customers")}</option>
               <option value="packages">{t("nav.packages")}</option>
+              <option value="requests">{t("nav.requests")}</option>
+              <option value="order_payments">{t("nav.payments")}</option>
+              <option value="partner_commissions">{t("nav.partner_commissions")}</option>
+              <option value="sales_commissions">{t("nav.sales_commissions")}</option>
             </select>
           </div>
           <div className="md:col-span-2">
@@ -55,7 +59,7 @@ export function ExcelImportPage() {
                 <thead><tr>{Object.keys(rows[0] ?? {}).map((k) => <th key={k}>{k}</th>)}</tr></thead>
                 <tbody>
                   {rows.slice(0, 10).map((r, i) => (
-                    <tr key={i}>{Object.keys(rows[0] ?? {}).map((k) => <td key={k}>{String((r as any)[k] ?? "—")}</td>)}</tr>
+                    <tr key={i}>{Object.keys(rows[0] ?? {}).map((k) => <td key={k}>{String(r[k] ?? "—")}</td>)}</tr>
                   ))}
                 </tbody>
               </table>

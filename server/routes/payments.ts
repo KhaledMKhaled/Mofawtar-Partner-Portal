@@ -57,7 +57,20 @@ paymentsRouter.get("/", requirePerm("payments:view"), async (req, res) => {
   res.json(rows);
 });
 
-paymentsRouter.get("/:id", requirePerm("payments:view"), async (req, res) => {
+paymentsRouter.get("/summary/totals", requirePerm("payments:view"), async (req, res) => {
+  const cu = getUser(req)!;
+  const where = partnerScoped(cu) ? eq(orderPayments.partnerId, cu.partnerId!) : undefined;
+  const rows = where
+    ? await db
+        .select({ status: orderPayments.status, count: sql<number>`COUNT(*)::int`, total: sql<string>`COALESCE(SUM(net_due_to_company),0)::text` })
+        .from(orderPayments).where(where).groupBy(orderPayments.status)
+    : await db
+        .select({ status: orderPayments.status, count: sql<number>`COUNT(*)::int`, total: sql<string>`COALESCE(SUM(net_due_to_company),0)::text` })
+        .from(orderPayments).groupBy(orderPayments.status);
+  res.json(rows);
+});
+
+paymentsRouter.get("/:id(\\d+)", requirePerm("payments:view"), async (req, res) => {
   const id = Number(req.params.id);
   const cu = getUser(req)!;
   const [op] = await db
@@ -87,7 +100,7 @@ const transitionInput = z.object({
   reason: z.string().optional().nullable(),
 });
 
-paymentsRouter.post("/:id/transition", requirePerm("payments:change_status"), async (req, res) => {
+paymentsRouter.post("/:id(\\d+)/transition", requirePerm("payments:change_status"), async (req, res) => {
   const id = Number(req.params.id);
   const parsed = transitionInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
@@ -109,15 +122,3 @@ paymentsRouter.post("/:id/transition", requirePerm("payments:change_status"), as
   res.json({ ok: true });
 });
 
-paymentsRouter.get("/summary/totals", requirePerm("payments:view"), async (req, res) => {
-  const cu = getUser(req)!;
-  const where = partnerScoped(cu) ? eq(orderPayments.partnerId, cu.partnerId!) : undefined;
-  const rows = where
-    ? await db
-        .select({ status: orderPayments.status, count: sql<number>`COUNT(*)::int`, total: sql<string>`COALESCE(SUM(net_due_to_company),0)::text` })
-        .from(orderPayments).where(where).groupBy(orderPayments.status)
-    : await db
-        .select({ status: orderPayments.status, count: sql<number>`COUNT(*)::int`, total: sql<string>`COALESCE(SUM(net_due_to_company),0)::text` })
-        .from(orderPayments).groupBy(orderPayments.status);
-  res.json(rows);
-});

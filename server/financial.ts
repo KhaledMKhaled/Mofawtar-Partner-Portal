@@ -715,13 +715,15 @@ export async function createSettlement(opts: {
 }
 
 // -------- Date range filter helper --------
+import type { SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 export function dateRangeFilter(
-  col: { name: string },
+  col: PgColumn,
   from?: string | null,
   to?: string | null,
-) {
-  const filters: any[] = [];
-  if (from) filters.push(gte(col as any, new Date(from)));
-  if (to) filters.push(lte(col as any, new Date(to)));
+): SQL[] {
+  const filters: SQL[] = [];
+  if (from) filters.push(gte(col, new Date(from)));
+  if (to) filters.push(lte(col, new Date(to)));
   return filters;
 }

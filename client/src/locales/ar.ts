@@ -409,8 +409,8 @@ export const ar: Translations = {
     newSettlement: "تسوية جديدة",
     complete: "إتمام التسوية",
     directions: {
-      partner_owes_company: "الشريك مدين للشركة",
-      company_owes_partner: "الشركة مدينة للشريك",
+      partner_to_company: "الشريك مدين للشركة",
+      company_to_partner: "الشركة مدينة للشريك",
       balanced: "متوازن",
     },
   },

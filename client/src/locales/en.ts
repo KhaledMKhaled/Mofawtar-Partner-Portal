@@ -407,8 +407,8 @@ export const en = {
     newSettlement: "New settlement",
     complete: "Complete settlement",
     directions: {
-      partner_owes_company: "Partner owes company",
-      company_owes_partner: "Company owes partner",
+      partner_to_company: "Partner owes company",
+      company_to_partner: "Company owes partner",
       balanced: "Balanced",
     },
   },
