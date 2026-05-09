@@ -452,7 +452,7 @@ export async function runSeed() {
   const [superAdminRole] = await db.select().from(roles).where(eq(roles.key, "company_super_admin"));
 
   // Superadmin user
-  const adminEmail = "A.Sirag@mofawter.com";
+  const adminEmail = "a.sirag@mofawter.com";
   const existing = await db.select().from(users).where(eq(users.email, adminEmail));
   if (!existing[0]) {
     const hash = await hashPassword("123123123");
