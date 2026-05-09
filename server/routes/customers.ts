@@ -44,8 +44,14 @@ customersRouter.get("/", requirePerm("customers:view"), async (req, res) => {
     );
   }
   if (cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
+    // Partner users may see any customer their partner has either owned
+    // (any time) or has a request for (any status, including draft) —
+    // so newly-created customers are reachable immediately after Step 2.
     filters.push(
-      sql`EXISTS (SELECT 1 FROM customer_ownership o WHERE o.customer_id = ${customers.id} AND o.partner_id = ${cu.partnerId})`,
+      sql`(
+        EXISTS (SELECT 1 FROM customer_ownership o WHERE o.customer_id = ${customers.id} AND o.partner_id = ${cu.partnerId})
+        OR EXISTS (SELECT 1 FROM requests r WHERE r.customer_id = ${customers.id} AND r.partner_id = ${cu.partnerId})
+      )`,
     );
   }
   const where = filters.length ? and(...filters) : undefined;
@@ -80,15 +86,21 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     .orderBy(desc(customerOwnership.createdAt));
 
   const currentOwner = await getOwnerAt(id);
-  // Permission scoping: partner-scoped users may only view a customer
-  // their partner has owned or currently owns.
+  // Permission scoping: partner-scoped users may view a customer their
+  // partner has either owned or has any request for (covers pre-activation
+  // Draft/New/Received/Under-activation states from the wizard).
   if (
     cu.partnerId &&
     cu.roleKey !== "company_super_admin" &&
     cu.roleKey !== "company_accountant" &&
     !owners.some((o) => o.partnerId === cu.partnerId)
   ) {
-    return res.status(403).json({ error: "forbidden" });
+    const [hasReq] = await db
+      .select({ id: requests.id })
+      .from(requests)
+      .where(and(eq(requests.customerId, id), eq(requests.partnerId, cu.partnerId)))
+      .limit(1);
+    if (!hasReq) return res.status(403).json({ error: "forbidden" });
   }
 
   const reqs = await db
