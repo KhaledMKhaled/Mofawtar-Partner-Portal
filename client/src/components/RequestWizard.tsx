@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { Modal } from "./Modal";
 import { Field } from "./Field";
-import { Search, AlertTriangle, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
+import { Search, AlertTriangle, ArrowRight, ArrowLeft, Printer } from "lucide-react";
 import { useCurrentUser } from "../hooks/useAuth";
 import { OPERATION_TYPES, type OperationType } from "../../../shared/requests";
 
@@ -482,30 +482,129 @@ export function RequestWizard({
         </div>
       )}
 
-      {step === 4 && draft && (
-        <div>
-          <p className="text-sm text-muted mb-3">{t("wizard.step4.intro")}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Summary label={t("wizard.srNumber")} value={draft.request.srNumber} mono />
-            <Summary label={t("wizard.taxCard")} value={tax} mono />
-            <Summary label={t("customers.businessName")} value={customer.name} />
-            <Summary label={t("requests.operationType")} value={operationType ? t(`operationTypes.${operationType}`) : "—"} />
-            <Summary
-              label={t("requests.package")}
-              value={
-                packages.data?.find((p) => p.id === packageId)
-                  ? `${packages.data.find((p) => p.id === packageId)!.name} — ${Number(packages.data.find((p) => p.id === packageId)!.finalPriceAfterTax).toFixed(2)}`
-                  : "—"
-              }
-            />
-            <Summary label={t("requests.collectionConfirmation")} value={collectionConfirmed ? t("common.yes") : t("common.no")} />
+      {step === 4 && draft && (() => {
+        const pkg = packages.data?.find((p) => p.id === packageId);
+        const partnerName =
+          (isCompany ? partnersQ.data?.find((p) => p.id === wizardPartnerId)?.name : null) ??
+          user?.partnerName ?? "—";
+        const salesName =
+          user?.roleKey === "sales"
+            ? user.name
+            : teamMembers.data?.find((m) => m.id === salesUserId)?.name ?? "—";
+        const finalPrice = pkg ? Number(pkg.finalPriceAfterTax) : 0;
+        const beforeTax = pkg ? Number(pkg.itemPriceBeforeTax) : 0;
+        const taxAmount = Math.max(0, finalPrice - beforeTax);
+        return (
+          <div>
+            <p className="text-sm text-muted mb-3">{t("wizard.step4.intro")}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Written summary */}
+              <div>
+                <h4 className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">
+                  {t("wizard.step4.writtenSummary")}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Summary label={t("wizard.srNumber")} value={draft.request.srNumber} mono />
+                  <Summary label={t("wizard.taxCard")} value={tax} mono />
+                  <Summary label={t("customers.businessName")} value={customer.name} />
+                  <Summary label={t("common.partner")} value={partnerName} />
+                  <Summary label={t("wizard.assignSales")} value={salesName} />
+                  <Summary label={t("requests.operationType")} value={operationType ? t(`operationTypes.${operationType}`) : "—"} />
+                  <Summary label={t("requests.package")} value={pkg ? pkg.name : "—"} />
+                  <Summary label={t("requests.realReceiptNumber")} value={realReceiptNumber || "—"} mono />
+                  <Summary label={t("customers.primaryPhone")} value={customer.primaryPhone || "—"} mono />
+                  <Summary label={t("requests.collectionConfirmation")} value={collectionConfirmed ? t("common.yes") : t("common.no")} />
+                </div>
+              </div>
+
+              {/* POS receipt */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
+                    {t("wizard.step4.posReceipt")}
+                  </h4>
+                  <button
+                    type="button"
+                    className="btn-outline btn-xs flex items-center gap-1 text-xs"
+                    onClick={() => {
+                      document.body.classList.add("pos-print-mode");
+                      const cleanup = () => {
+                        document.body.classList.remove("pos-print-mode");
+                        window.removeEventListener("afterprint", cleanup);
+                      };
+                      window.addEventListener("afterprint", cleanup);
+                      try { window.print(); } finally { setTimeout(cleanup, 1000); }
+                    }}
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    {t("wizard.step4.printReceipt")}
+                  </button>
+                </div>
+                <div className="pos-print pos-receipt mx-auto" dir="ltr">
+                  <h2>MOFAWTER</h2>
+                  <div className="pos-center pos-small">{partnerName}</div>
+                  <div className="pos-sep" />
+                  <div className="pos-row pos-bold">
+                    <span>SR #</span>
+                    <span>{draft.request.srNumber}</span>
+                  </div>
+                  <div className="pos-row pos-small">
+                    <span>Date</span>
+                    <span>{new Date().toLocaleString("en-GB")}</span>
+                  </div>
+                  <div className="pos-sep" />
+                  <div className="pos-bold">CUSTOMER</div>
+                  <div className="pos-row"><span>Name</span><span>{customer.name}</span></div>
+                  <div className="pos-row"><span>Tax Card</span><span>{tax}</span></div>
+                  {customer.commercialRegistry && (
+                    <div className="pos-row"><span>CR No.</span><span>{customer.commercialRegistry}</span></div>
+                  )}
+                  {customer.nationalId && (
+                    <div className="pos-row"><span>National ID</span><span>{customer.nationalId}</span></div>
+                  )}
+                  {customer.primaryPhone && (
+                    <div className="pos-row">
+                      <span>Phone</span>
+                      <span>{customer.primaryPhone}{customer.primaryPhoneWhatsapp ? " (WA)" : ""}</span>
+                    </div>
+                  )}
+                  {customer.altPhone && (
+                    <div className="pos-row">
+                      <span>Alt Phone</span>
+                      <span>{customer.altPhone}{customer.altPhoneWhatsapp ? " (WA)" : ""}</span>
+                    </div>
+                  )}
+                  {customer.email && (
+                    <div className="pos-row pos-small"><span>Email</span><span>{customer.email}</span></div>
+                  )}
+                  <div className="pos-sep" />
+                  <div className="pos-bold">REQUEST</div>
+                  <div className="pos-row"><span>Operation</span><span>{operationType || "—"}</span></div>
+                  <div className="pos-row"><span>Package</span><span>{pkg?.name ?? "—"}</span></div>
+                  {realReceiptNumber && (
+                    <div className="pos-row"><span>Receipt #</span><span>{realReceiptNumber}</span></div>
+                  )}
+                  <div className="pos-row"><span>Sales Rep</span><span>{salesName}</span></div>
+                  <div className="pos-sep" />
+                  <div className="pos-bold">AMOUNT</div>
+                  <div className="pos-row"><span>Subtotal</span><span>{beforeTax.toFixed(2)}</span></div>
+                  <div className="pos-row"><span>Tax</span><span>{taxAmount.toFixed(2)}</span></div>
+                  <div className="pos-sep" />
+                  <div className="pos-row pos-total"><span>TOTAL</span><span>{finalPrice.toFixed(2)} EGP</span></div>
+                  <div className="pos-sep" />
+                  <div className="pos-row pos-small">
+                    <span>Collection</span>
+                    <span>{collectionConfirmed ? "CONFIRMED" : "PENDING"}</span>
+                  </div>
+                  <div className="pos-sep" />
+                  <div className="pos-center pos-small">Thank you</div>
+                  <div className="pos-center pos-small">{draft.request.srNumber}</div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 rounded-lg bg-violet-50 text-violet-800 px-3 py-2 text-sm flex items-start gap-2">
-            <CheckCircle2 className="w-4 h-4 mt-0.5" />
-            <span>{t("wizard.step4.confirm")}</span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </Modal>
   );
 }

@@ -322,7 +322,12 @@ export const ar: Translations = {
     },
     step2: { intro: "أكّد بيانات العميل أو حدّثها." },
     step3: { intro: "اختر الباقة ونوع العملية وأكّد التحصيل." },
-    step4: { intro: "راجع البيانات قبل الإرسال." },
+    step4: {
+      intro: "راجع البيانات قبل الإرسال.",
+      writtenSummary: "ملخص مكتوب",
+      posReceipt: "إيصال POS",
+      printReceipt: "طباعة الإيصال",
+    },
     errors: {
       invalid_tax_card: "رقم البطاقة الضريبية غير صالح.",
       duplicate_active_request: "يوجد طلب جارٍ لهذا العميل بالفعل.",

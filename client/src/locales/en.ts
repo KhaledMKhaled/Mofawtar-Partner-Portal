@@ -320,7 +320,12 @@ export const en = {
     },
     step2: { intro: "Confirm or update the customer profile." },
     step3: { intro: "Pick the package, operation type, and confirm collection." },
-    step4: { intro: "Review the details below before submitting." },
+    step4: {
+      intro: "Review the details below before submitting.",
+      writtenSummary: "Written summary",
+      posReceipt: "POS receipt",
+      printReceipt: "Print receipt",
+    },
     errors: {
       invalid_tax_card: "Invalid tax card number.",
       duplicate_active_request: "This customer already has an active request in progress.",
