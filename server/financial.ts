@@ -92,34 +92,16 @@ export async function onRequestActivated(opts: {
   userId: number;
 }): Promise<{ orderPaymentId: number | null; partnerCommissionId: number | null; salesCommissionId: number | null }> {
   const [r] = await db.select().from(requests).where(eq(requests.id, opts.requestId));
-  if (!r || !r.packageId) {
-    return { orderPaymentId: null, partnerCommissionId: null, salesCommissionId: null };
-  }
-  // Idempotency
-  const [existing] = await db
-    .select({ id: orderPayments.id })
-    .from(orderPayments)
-    .where(eq(orderPayments.requestId, opts.requestId))
-    .limit(1);
-  if (existing) {
-    const [pc] = await db
-      .select({ id: partnerCommissions.id })
-      .from(partnerCommissions)
-      .where(eq(partnerCommissions.requestId, opts.requestId))
-      .limit(1);
-    const [sc] = await db
-      .select({ id: salesCommissions.id })
-      .from(salesCommissions)
-      .where(eq(salesCommissions.requestId, opts.requestId))
-      .limit(1);
-    return { orderPaymentId: existing.id, partnerCommissionId: pc?.id ?? null, salesCommissionId: sc?.id ?? null };
-  }
-
+  // Fail-closed: an activated request without a package or partner is a
+  // data integrity bug — refuse to silently no-op so the caller (and the
+  // request transition) can surface the failure instead of leaving the
+  // request activated with no financial track.
+  if (!r) throw new Error(`request_not_found:${opts.requestId}`);
+  if (!r.packageId) throw new Error(`request_missing_package:${opts.requestId}`);
   const [pkg] = await db.select().from(packages).where(eq(packages.id, r.packageId));
   const [partner] = await db.select().from(partners).where(eq(partners.id, r.partnerId));
-  if (!pkg || !partner) {
-    return { orderPaymentId: null, partnerCommissionId: null, salesCommissionId: null };
-  }
+  if (!pkg) throw new Error(`package_not_found:${r.packageId}`);
+  if (!partner) throw new Error(`partner_not_found:${r.partnerId}`);
   const base = await getCommissionBase();
   const beforeTax = Number(pkg.itemPriceBeforeTax);
   const afterTax = Number(pkg.finalPriceAfterTax);
@@ -138,7 +120,15 @@ export async function onRequestActivated(opts: {
   const salesAmount = calcCommission(baseAmount, salesPct);
   const netDueToCompany = Math.max(0, afterTax - partnerAmount);
 
-  const [op] = await db
+  // Idempotent backfill: if an order_payment already exists for this
+  // request (e.g., a prior activation half-applied), reuse it and only
+  // create whichever commission rows are missing.
+  const [existingOp] = await db
+    .select()
+    .from(orderPayments)
+    .where(eq(orderPayments.requestId, opts.requestId))
+    .limit(1);
+  const op = existingOp ?? (await db
     .insert(orderPayments)
     .values({
       requestId: r.id,
@@ -152,27 +142,34 @@ export async function onRequestActivated(opts: {
       netDueToCompany: String(netDueToCompany),
       status: "pending_collection_confirmation",
     })
-    .returning();
-  await db.insert(orderPaymentStatusHistory).values({
-    orderPaymentId: op.id,
-    fromStatus: null,
-    toStatus: "pending_collection_confirmation",
-    changedByUserId: opts.userId,
-    reason: "auto-created on activation",
-  });
-  await audit({
-    userId: opts.userId,
-    action: "order_payment.created",
-    entityType: "order_payment",
-    entityId: op.id,
-    requestId: r.id,
-    customerId: r.customerId,
-    partnerId: r.partnerId,
-    newValue: op,
-  });
+    .returning())[0];
+  if (!existingOp) {
+    await db.insert(orderPaymentStatusHistory).values({
+      orderPaymentId: op.id,
+      fromStatus: null,
+      toStatus: "pending_collection_confirmation",
+      changedByUserId: opts.userId,
+      reason: "auto-created on activation",
+    });
+    await audit({
+      userId: opts.userId,
+      action: "order_payment.created",
+      entityType: "order_payment",
+      entityId: op.id,
+      requestId: r.id,
+      customerId: r.customerId,
+      partnerId: r.partnerId,
+      newValue: op,
+    });
+  }
 
-  let pcId: number | null = null;
-  if (partnerAmount > 0) {
+  const [existingPc] = await db
+    .select({ id: partnerCommissions.id })
+    .from(partnerCommissions)
+    .where(eq(partnerCommissions.requestId, opts.requestId))
+    .limit(1);
+  let pcId: number | null = existingPc?.id ?? null;
+  if (!existingPc && partnerAmount > 0) {
     const safetyDays = partner.safetyPeriodDays ?? 14;
     const safetyEnds = new Date(Date.now() + safetyDays * 24 * 60 * 60 * 1000);
     const [pc] = await db
@@ -209,8 +206,13 @@ export async function onRequestActivated(opts: {
     });
   }
 
-  let scId: number | null = null;
-  if (salesAmount > 0 && r.salesUserId) {
+  const [existingSc] = await db
+    .select({ id: salesCommissions.id })
+    .from(salesCommissions)
+    .where(eq(salesCommissions.requestId, opts.requestId))
+    .limit(1);
+  let scId: number | null = existingSc?.id ?? null;
+  if (!existingSc && salesAmount > 0 && r.salesUserId) {
     const [sc] = await db
       .insert(salesCommissions)
       .values({

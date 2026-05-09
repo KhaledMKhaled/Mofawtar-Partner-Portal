@@ -673,7 +673,12 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
     newValue: { status: to, reason: parsed.data.reason ?? null },
   });
 
-  // First activation under this partner → start ownership.
+  // First activation under this partner → start ownership, then create
+  // order_payment + commission rows. If financial bootstrap throws, roll
+  // the request status back so we never leave a request `activated`
+  // without its full financial track. (Drizzle's transactional API is
+  // not used here because db helpers run their own queries; instead we
+  // perform a compensating revert.)
   if (to === "activated") {
     const had = await db
       .select({ id: customerOwnership.id })
@@ -688,12 +693,20 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
     if (had.length === 0) {
       await startOwnership({ customerId: old.customerId, partnerId: old.partnerId, userId: cu.id });
     }
-    // Phase 3: create order_payment + commission rows on activation.
-    // Fail-closed: if financial bootstrap throws, surface to caller so the
-    // outer transaction (or caller retry) can react. The function itself is
-    // idempotent on (request_id) via unique indexes.
-    const { onRequestActivated } = await import("../financial.js");
-    await onRequestActivated({ requestId: id, userId: cu.id });
+    try {
+      const { onRequestActivated } = await import("../financial.js");
+      await onRequestActivated({ requestId: id, userId: cu.id });
+    } catch (e: unknown) {
+      await db.update(requests).set({ status: from, activatedAt: old.activatedAt, updatedAt: new Date() }).where(eq(requests.id, id));
+      await db.insert(requestStatusHistory).values({
+        requestId: id,
+        fromStatus: to,
+        toStatus: from,
+        reason: `activation rollback: ${e instanceof Error ? e.message : String(e)}`,
+        changedByUserId: cu.id,
+      });
+      return res.status(409).json({ error: "activation_failed", detail: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   await notifyRequestStatus(
