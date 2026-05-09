@@ -327,6 +327,7 @@ export const ar: Translations = {
       writtenSummary: "ملخص مكتوب",
       posReceipt: "إيصال POS",
       printReceipt: "طباعة الإيصال",
+      saveReceipt: "حفظ الإيصال كصورة",
     },
     errors: {
       invalid_tax_card: "رقم البطاقة الضريبية غير صالح.",

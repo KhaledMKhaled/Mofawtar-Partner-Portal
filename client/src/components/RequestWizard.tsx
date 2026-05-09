@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { Modal } from "./Modal";
 import { Field } from "./Field";
-import { Search, AlertTriangle, ArrowRight, ArrowLeft, Printer } from "lucide-react";
+import { Search, AlertTriangle, ArrowRight, ArrowLeft, Download } from "lucide-react";
+import { toPng } from "html-to-image";
 import { useCurrentUser } from "../hooks/useAuth";
 import { OPERATION_TYPES, type OperationType } from "../../../shared/requests";
 
@@ -95,6 +96,7 @@ export function RequestWizard({
   const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const receiptElRef = useRef<HTMLDivElement | null>(null);
   const [tax, setTax] = useState("");
   const [lookup, setLookup] = useState<LookupResp | null>(null);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
@@ -494,14 +496,24 @@ export function RequestWizard({
         const finalPrice = pkg ? Number(pkg.finalPriceAfterTax) : 0;
         const beforeTax = pkg ? Number(pkg.itemPriceBeforeTax) : 0;
         const taxAmount = Math.max(0, finalPrice - beforeTax);
-        const onPrint = () => {
-          document.body.classList.add("pos-print-mode");
-          const cleanup = () => {
-            document.body.classList.remove("pos-print-mode");
-            window.removeEventListener("afterprint", cleanup);
-          };
-          window.addEventListener("afterprint", cleanup);
-          try { window.print(); } finally { setTimeout(cleanup, 1500); }
+        const receiptRef = receiptElRef;
+        const onSave = async () => {
+          if (!receiptRef.current) return;
+          try {
+            const dataUrl = await toPng(receiptRef.current, {
+              pixelRatio: 3,
+              backgroundColor: "#ffffff",
+              cacheBust: true,
+            });
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `receipt-${draft.request.srNumber}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          } catch (err) {
+            console.error("Failed to save receipt:", err);
+          }
         };
         return (
           <div>
@@ -528,12 +540,13 @@ export function RequestWizard({
                 <button
                   type="button"
                   className="self-stretch inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 px-3 py-1.5 text-xs font-semibold"
-                  onClick={onPrint}
+                  onClick={onSave}
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  {t("wizard.step4.printReceipt")}
+                  <Download className="w-3.5 h-3.5" />
+                  {t("wizard.step4.saveReceipt")}
                 </button>
                 <div
+                  ref={receiptRef}
                   className="pos-print bg-white text-black border border-dashed border-zinc-400 rounded-md shadow-sm"
                   style={{
                     width: "80mm",

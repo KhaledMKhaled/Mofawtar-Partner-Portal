@@ -325,6 +325,7 @@ export const en = {
       writtenSummary: "Written summary",
       posReceipt: "POS receipt",
       printReceipt: "Print receipt",
+      saveReceipt: "Save receipt as image",
     },
     errors: {
       invalid_tax_card: "Invalid tax card number.",
