@@ -72,10 +72,11 @@ export function UsersPage() {
 
   const usersQ = useQuery({ queryKey: ["users"], queryFn: () => api<User[]>("/api/users") });
   const rolesQ = useQuery({ queryKey: ["roles"], queryFn: () => api<Role[]>("/api/roles") });
+  // Load partners for any user without a fixed partner (i.e. company-scoped roles)
   const partnersQ = useQuery({
     queryKey: ["partners"],
     queryFn: () => api<Partner[]>("/api/partners"),
-    enabled: me?.roleKey === "company_super_admin",
+    enabled: !me?.partnerId,
   });
 
   const [open, setOpen] = useState(false);
@@ -83,10 +84,9 @@ export function UsersPage() {
   const [form, setForm] = useState<UserForm>(blank);
   const [error, setError] = useState<string | null>(null);
 
-  // For partner-scoped users (partner_admin, team_leader, sales) their partner
-  // is fixed to me.partnerId. For company_super_admin the partner comes from
-  // the form so the team-leader dropdown is scoped to the selected partner.
-  const tlPartnerId = me?.roleKey === "company_super_admin" ? form.partnerId : me?.partnerId;
+  // If the current user has a fixed partner (partner_admin, team_leader, sales)
+  // use it directly; otherwise use whatever the form has selected.
+  const tlPartnerId = me?.partnerId ?? form.partnerId;
   const tlQ = useQuery({
     queryKey: ["team-leaders", tlPartnerId],
     queryFn: () => api<{ id: number; name: string }[]>(`/api/users/team-leaders?partnerId=${tlPartnerId}`),
@@ -111,7 +111,9 @@ export function UsersPage() {
 
   const onNew = () => {
     setEditing(null);
-    setForm({ ...blank, roleId: availableRoles[0]?.id || 0, partnerId: me?.roleKey === "partner_admin" ? me.partnerId : null });
+    const initPartnerId = me?.partnerId ?? null;
+    const initTeamLeaderId = me?.roleKey === "team_leader" ? me.id : null;
+    setForm({ ...blank, roleId: availableRoles[0]?.id || 0, partnerId: initPartnerId, teamLeaderId: initTeamLeaderId });
     setError(null);
     setOpen(true);
   };
@@ -141,11 +143,12 @@ export function UsersPage() {
   };
 
   const selectedRole = availableRoles.find((r) => r.id === form.roleId);
-  // Always show the partner field for company_super_admin so they can set the
-  // partner before or after choosing a role.
-  const showPartner = me?.roleKey === "company_super_admin";
-  // Show team leader only when both a partner and the sales role are selected.
+  // Show partner field for any user without a fixed partner (company-scoped roles).
+  const showPartner = !me?.partnerId;
+  // Show team leader only when the sales role is selected and a partner is resolved.
   const showTeamLeader = selectedRole?.key === "sales" && !!tlPartnerId;
+  // If the current user is a team leader they can only assign themselves.
+  const isTeamLeader = me?.roleKey === "team_leader";
   const canCreate = can(me, "users:create");
   const canEdit = can(me, "users:edit");
 
@@ -232,7 +235,14 @@ export function UsersPage() {
           </Field>
           <Field label={t("common.role")} required>
             <select className="input" value={form.roleId}
-              onChange={(e) => setForm({ ...form, roleId: Number(e.target.value), teamLeaderId: null })}>
+              onChange={(e) => {
+                const newRoleId = Number(e.target.value);
+                const newRole = availableRoles.find((r) => r.id === newRoleId);
+                const nextTeamLeaderId = newRole?.key === "sales" && isTeamLeader
+                  ? (me?.id ?? null)
+                  : null;
+                setForm({ ...form, roleId: newRoleId, teamLeaderId: nextTeamLeaderId });
+              }}>
               <option value={0}>—</option>
               {availableRoles.map((r) => (
                 <option key={r.id} value={r.id}>{isAr ? r.nameAr : r.nameEn}</option>
@@ -250,15 +260,20 @@ export function UsersPage() {
           )}
           {showTeamLeader && (
             <Field label={t("users.teamLeader")}>
-              <select
-                className="input"
-                value={form.teamLeaderId ?? ""}
-                onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}
-                disabled={tlQ.isLoading}
-              >
-                <option value="">{tlQ.isLoading ? t("common.loading") : "—"}</option>
-                {tlQ.data?.map((t2) => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
-              </select>
+              {isTeamLeader ? (
+                // Team leaders can only assign themselves — show their name read-only.
+                <input className="input bg-gray-50 cursor-not-allowed" value={me?.name ?? ""} disabled readOnly />
+              ) : (
+                <select
+                  className="input"
+                  value={form.teamLeaderId ?? ""}
+                  onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}
+                  disabled={tlQ.isLoading}
+                >
+                  <option value="">{tlQ.isLoading ? t("common.loading") : "—"}</option>
+                  {tlQ.data?.map((t2) => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
+                </select>
+              )}
             </Field>
           )}
           <Field label={t("common.status")}>
