@@ -71,6 +71,7 @@ const ROUTES: Partial<Record<Module, string>> = {
   ownership: "/ownership",
   reports: "/reports",
   audit_log: "/audit-log",
+  excel_import: "/excel-import",
   settings: "/settings",
 };
 

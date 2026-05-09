@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { useCurrentUser } from "../hooks/useAuth";
 import { PageHeader } from "../components/AppShell";
-import { Building2, Users, PackageOpen, ShieldCheck, Receipt, Wallet, HandCoins, ClipboardList } from "lucide-react";
+import { Building2, Users, PackageOpen, ShieldCheck, Receipt, Wallet, HandCoins, ClipboardList, TrendingUp, AlertTriangle } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { fmtMoney } from "../lib/financial";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -15,56 +16,55 @@ const QUICK_TILES_BY_ROLE: Record<string, QuickTile[]> = {
     { key: "partners", icon: Building2, to: "/partners" },
     { key: "users", icon: Users, to: "/users" },
     { key: "packages", icon: PackageOpen, to: "/packages" },
-    { key: "roles", icon: ShieldCheck, to: "/roles" },
+    { key: "reports", icon: TrendingUp, to: "/reports" },
   ],
   company_accountant: [
     { key: "payments", icon: Wallet, to: "/payments" },
     { key: "claims", icon: ClipboardList, to: "/claims" },
     { key: "partner_commissions", icon: HandCoins, to: "/partner-commissions" },
+    { key: "settlements", icon: TrendingUp, to: "/settlements" },
   ],
   partner_admin: [
     { key: "users", icon: Users, to: "/users" },
     { key: "customers", icon: Users, to: "/customers" },
     { key: "requests", icon: Receipt, to: "/requests" },
+    { key: "claims", icon: ClipboardList, to: "/claims" },
   ],
   partner_accountant: [
     { key: "payments", icon: Wallet, to: "/payments" },
     { key: "claims", icon: ClipboardList, to: "/claims" },
+    { key: "settlements", icon: TrendingUp, to: "/settlements" },
   ],
   team_leader: [
     { key: "requests", icon: Receipt, to: "/requests" },
     { key: "customers", icon: Users, to: "/customers" },
+    { key: "sales_commissions", icon: HandCoins, to: "/sales-commissions" },
   ],
   sales: [
     { key: "requests", icon: Receipt, to: "/requests" },
     { key: "customers", icon: Users, to: "/customers" },
+    { key: "sales_commissions", icon: HandCoins, to: "/sales-commissions" },
   ],
 };
+
+interface KpiResponse {
+  cards: Array<{ key: string; label: string; value: number; format: "money" | "count"; tone?: "violet"|"success"|"warning"|"danger" }>;
+}
 
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const { data: user } = useCurrentUser();
   const isAr = i18n.language?.startsWith("ar");
 
-  // Phase 1 lightweight stats — uses the only data we currently have
-  const partnersQ = useQuery({
-    queryKey: ["partners-count"],
-    queryFn: () => api<unknown[]>("/api/partners").catch(() => [] as unknown[]),
-    enabled: !!user && (user.permissions || []).includes("partners:view"),
-  });
-  const usersQ = useQuery({
-    queryKey: ["users-count"],
-    queryFn: () => api<unknown[]>("/api/users").catch(() => [] as unknown[]),
-    enabled: !!user && (user.permissions || []).includes("users:view"),
-  });
-  const packagesQ = useQuery({
-    queryKey: ["packages-count"],
-    queryFn: () => api<unknown[]>("/api/packages").catch(() => [] as unknown[]),
-    enabled: !!user && (user.permissions || []).includes("packages:view"),
+  const kpisQ = useQuery({
+    queryKey: ["dashboard-kpis"],
+    queryFn: () => api<KpiResponse>("/api/reports/dashboard/kpis"),
+    enabled: !!user,
   });
 
   if (!user) return null;
   const tiles = QUICK_TILES_BY_ROLE[user.roleKey] || [];
+  const cards = kpisQ.data?.cards ?? [];
 
   return (
     <div>
@@ -73,22 +73,17 @@ export function DashboardPage() {
         subtitle={isAr ? user.roleNameAr : user.roleNameEn}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {partnersQ.data && (
-          <StatCard label={t("nav.partners")} value={partnersQ.data.length} icon={Building2} />
-        )}
-        {usersQ.data && (
-          <StatCard label={t("nav.users")} value={usersQ.data.length} icon={Users} />
-        )}
-        {packagesQ.data && (
-          <StatCard label={t("nav.packages")} value={packagesQ.data.length} icon={PackageOpen} />
-        )}
-        <StatCard label={t("common.role")} value={isAr ? user.roleNameAr : user.roleNameEn} icon={ShieldCheck} />
-      </div>
+      {cards.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {cards.map((c) => (
+            <KpiCard key={c.key} label={t(`dashboard.kpis.${c.key}`, c.label)} value={c.format === "money" ? fmtMoney(c.value) : c.value.toLocaleString()} tone={c.tone} />
+          ))}
+        </div>
+      )}
 
       <div className="stamp-card p-6">
         <h3 className="font-semibold text-ink mb-1">{t("dashboard.quickActions")}</h3>
-        <p className="text-sm text-muted mb-5">{t("dashboard.phaseNote")}</p>
+        <p className="text-sm text-muted mb-5">{t("dashboard.subtitle")}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {tiles.map((tile) => {
             const Icon = tile.icon;
@@ -111,12 +106,19 @@ export function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: IconType }) {
+function KpiCard({ label, value, tone = "violet" }: { label: string; value: string | number; tone?: "violet"|"success"|"warning"|"danger" }) {
+  const toneClass = {
+    violet: "bg-violet-50 text-violet-700",
+    success: "bg-green-50 text-green-700",
+    warning: "bg-amber-50 text-amber-700",
+    danger: "bg-red-50 text-red-700",
+  }[tone];
+  const Icon = tone === "danger" || tone === "warning" ? AlertTriangle : TrendingUp;
   return (
     <div className="stat-card">
       <div className="flex items-center justify-between">
         <div className="text-xs uppercase tracking-wide text-muted font-semibold">{label}</div>
-        <div className="w-9 h-9 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center">
+        <div className={`w-9 h-9 rounded-lg ${toneClass} flex items-center justify-center`}>
           <Icon className="w-5 h-5" />
         </div>
       </div>

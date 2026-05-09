@@ -68,6 +68,16 @@ export const NOTIFICATION_TYPES = [
   "ownership.extended",
   "ownership.transferred",
   "ownership.returned",
+  "commission.eligible_for_claim",
+  "claim.created",
+  "claim.approved",
+  "claim.rejected",
+  "claim.settled",
+  "payment.received_by_company",
+  "payment.settled",
+  "settlement.completed",
+  "sales_commission.approved",
+  "sales_commission.paid",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

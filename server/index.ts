@@ -15,8 +15,18 @@ import { customersRouter } from "./routes/customers.js";
 import { requestsRouter } from "./routes/requests.js";
 import { ownershipRouter } from "./routes/ownership.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { paymentsRouter } from "./routes/payments.js";
+import { partnerCommissionsRouter } from "./routes/partner-commissions.js";
+import { salesCommissionsRouter } from "./routes/sales-commissions.js";
+import { claimsRouter } from "./routes/claims.js";
+import { payoutBatchesRouter } from "./routes/payout-batches.js";
+import { settlementsRouter } from "./routes/settlements.js";
+import { reportsRouter } from "./routes/reports.js";
+import { auditLogRouter } from "./routes/audit-log.js";
+import { excelImportRouter } from "./routes/excel-import.js";
 import { ensureSchema, runSeed } from "./seed.js";
 import { markExpiredOwnerships } from "./ownership.js";
+import { runFinancialHousekeep } from "./financial.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +71,15 @@ app.use("/api/customers", customersRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/ownership", ownershipRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/payments", paymentsRouter);
+app.use("/api/partner-commissions", partnerCommissionsRouter);
+app.use("/api/sales-commissions", salesCommissionsRouter);
+app.use("/api/claims", claimsRouter);
+app.use("/api/payout-batches", payoutBatchesRouter);
+app.use("/api/settlements", settlementsRouter);
+app.use("/api/reports", reportsRouter);
+app.use("/api/audit-log", auditLogRouter);
+app.use("/api/excel-import", excelImportRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("unhandled error", err);
@@ -100,6 +119,15 @@ async function start() {
   setInterval(
     () => markExpiredOwnerships().catch((e) => console.error("ownership housekeep failed", e)),
     24 * 60 * 60 * 1000,
+  );
+
+  // Financial housekeeping: flip safety→eligible, auto-create claims for partners
+  // configured with claim_cycle_type=auto. Runs hourly so claim cycles measured
+  // in days work without restart, but stays cheap.
+  runFinancialHousekeep().catch((e) => console.error("financial housekeep failed", e));
+  setInterval(
+    () => runFinancialHousekeep().catch((e) => console.error("financial housekeep failed", e)),
+    60 * 60 * 1000,
   );
 }
 

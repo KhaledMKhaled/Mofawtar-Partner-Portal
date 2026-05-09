@@ -83,19 +83,35 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     "requests:change_status",
     "requests:reopen",
     "excel_import:import",
+    "audit_log:view",
+    "reports:view",
+    "reports:export",
   ],
   partner_admin: [
     ...view("dashboard", "ownership", "reports"),
     ...all("users", "customers", "requests"),
-    ...view("payments", "partner_commissions", "claims"),
+    ...view("payments", "partner_commissions", "claims", "settlements", "audit_log"),
+    "payments:change_status",
+    "partner_commissions:change_status",
+    "claims:create",
+    "claims:view",
     "requests:reassign",
+    "audit_log:view",
+    "reports:view",
+    "reports:export",
   ],
   partner_accountant: [
     ...view("dashboard", "payments", "partner_commissions", "claims", "settlements", "reports"),
+    "payments:change_status",
+    "partner_commissions:change_status",
+    "claims:create",
+    "reports:view",
+    "reports:export",
   ],
   team_leader: [
-    ...view("dashboard", "customers", "requests", "reports"),
+    ...view("dashboard", "customers", "requests", "reports", "sales_commissions"),
     "requests:create",
+    "reports:view",
   ],
   sales: [
     ...view("dashboard", "customers", "requests"),
@@ -107,22 +123,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
 export const DEFAULT_NAVIGATION: Record<RoleKey, Module[]> = {
   company_super_admin: [
     "dashboard","partners","users","roles","packages","customers","requests",
-    "payments","partner_commissions","sales_commissions","claims","payout_batches",
+    "payments","partner_commissions","sales_commissions","claims","payout_batches","settlements",
     "ownership","reports","audit_log","settings",
   ],
   company_accountant: [
     "dashboard","requests","payments","partner_commissions","sales_commissions",
-    "claims","payout_batches","settlements","reports",
+    "claims","payout_batches","settlements","reports","audit_log",
   ],
   partner_admin: [
     "dashboard","users","customers","requests","payments","partner_commissions",
-    "claims","ownership","reports",
+    "claims","settlements","ownership","reports","audit_log",
   ],
   partner_accountant: [
     "dashboard","payments","partner_commissions","claims","settlements","reports",
   ],
   team_leader: [
-    "dashboard","customers","requests","reports",
+    "dashboard","customers","requests","sales_commissions","reports",
   ],
   sales: [
     "dashboard","customers","requests","sales_commissions",

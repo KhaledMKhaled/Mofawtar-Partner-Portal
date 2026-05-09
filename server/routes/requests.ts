@@ -688,6 +688,12 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
     if (had.length === 0) {
       await startOwnership({ customerId: old.customerId, partnerId: old.partnerId, userId: cu.id });
     }
+    // Phase 3: create order_payment + commission rows on activation.
+    // Fail-closed: if financial bootstrap throws, surface to caller so the
+    // outer transaction (or caller retry) can react. The function itself is
+    // idempotent on (request_id) via unique indexes.
+    const { onRequestActivated } = await import("../financial.js");
+    await onRequestActivated({ requestId: id, userId: cu.id });
   }
 
   await notifyRequestStatus(

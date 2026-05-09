@@ -233,6 +233,184 @@ export async function ensureSchema() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, read_at);
+
+    -- Phase 3: financial tables -----------------------------------------------
+    CREATE TABLE IF NOT EXISTS order_payments (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      package_id INTEGER REFERENCES packages(id),
+      gross_amount NUMERIC(14,2) NOT NULL,
+      tax_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      net_amount NUMERIC(14,2) NOT NULL,
+      partner_commission_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      net_due_to_company NUMERIC(14,2) NOT NULL DEFAULT 0,
+      status VARCHAR(40) NOT NULL DEFAULT 'pending_collection_confirmation',
+      settlement_id INTEGER,
+      received_at TIMESTAMP,
+      settled_at TIMESTAMP,
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS order_payments_request_idx ON order_payments(request_id);
+    CREATE INDEX IF NOT EXISTS order_payments_partner_idx ON order_payments(partner_id);
+    CREATE INDEX IF NOT EXISTS order_payments_status_idx ON order_payments(status);
+
+    CREATE TABLE IF NOT EXISTS order_payment_status_history (
+      id SERIAL PRIMARY KEY,
+      order_payment_id INTEGER NOT NULL REFERENCES order_payments(id) ON DELETE CASCADE,
+      from_status VARCHAR(40),
+      to_status VARCHAR(40) NOT NULL,
+      reason TEXT,
+      changed_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS partner_commissions (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      order_payment_id INTEGER REFERENCES order_payments(id),
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      package_id INTEGER REFERENCES packages(id),
+      base_amount NUMERIC(14,2) NOT NULL,
+      pct NUMERIC(6,3) NOT NULL,
+      amount NUMERIC(14,2) NOT NULL,
+      safety_ends_at TIMESTAMP,
+      status VARCHAR(40) NOT NULL DEFAULT 'in_safety_period',
+      claim_id INTEGER,
+      settlement_id INTEGER,
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS partner_commissions_partner_idx ON partner_commissions(partner_id);
+    CREATE INDEX IF NOT EXISTS partner_commissions_status_idx ON partner_commissions(status);
+    CREATE INDEX IF NOT EXISTS partner_commissions_request_idx ON partner_commissions(request_id);
+
+    CREATE TABLE IF NOT EXISTS partner_commission_status_history (
+      id SERIAL PRIMARY KEY,
+      partner_commission_id INTEGER NOT NULL REFERENCES partner_commissions(id) ON DELETE CASCADE,
+      from_status VARCHAR(40),
+      to_status VARCHAR(40) NOT NULL,
+      reason TEXT,
+      changed_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS sales_commissions (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      order_payment_id INTEGER REFERENCES order_payments(id),
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      sales_user_id INTEGER REFERENCES users(id),
+      team_leader_id INTEGER REFERENCES users(id),
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      package_id INTEGER REFERENCES packages(id),
+      base_amount NUMERIC(14,2) NOT NULL,
+      pct NUMERIC(6,3) NOT NULL,
+      amount NUMERIC(14,2) NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'new',
+      payout_batch_id INTEGER,
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS sales_commissions_partner_idx ON sales_commissions(partner_id);
+    CREATE INDEX IF NOT EXISTS sales_commissions_sales_idx ON sales_commissions(sales_user_id);
+    CREATE INDEX IF NOT EXISTS sales_commissions_status_idx ON sales_commissions(status);
+
+    CREATE TABLE IF NOT EXISTS sales_commission_status_history (
+      id SERIAL PRIMARY KEY,
+      sales_commission_id INTEGER NOT NULL REFERENCES sales_commissions(id) ON DELETE CASCADE,
+      from_status VARCHAR(40),
+      to_status VARCHAR(40) NOT NULL,
+      reason TEXT,
+      changed_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS claims (
+      id SERIAL PRIMARY KEY,
+      claim_number VARCHAR(60) NOT NULL UNIQUE,
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      status VARCHAR(30) NOT NULL DEFAULT 'draft',
+      auto_generated BOOLEAN NOT NULL DEFAULT FALSE,
+      total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      notes TEXT,
+      submitted_at TIMESTAMP,
+      approved_at TIMESTAMP,
+      approved_by_user_id INTEGER,
+      rejected_at TIMESTAMP,
+      rejection_reason TEXT,
+      settled_at TIMESTAMP,
+      settlement_id INTEGER,
+      created_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS claims_partner_idx ON claims(partner_id);
+    CREATE INDEX IF NOT EXISTS claims_status_idx ON claims(status);
+
+    CREATE TABLE IF NOT EXISTS claim_items (
+      id SERIAL PRIMARY KEY,
+      claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+      partner_commission_id INTEGER NOT NULL REFERENCES partner_commissions(id),
+      amount NUMERIC(14,2) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS payout_batches (
+      id SERIAL PRIMARY KEY,
+      batch_number VARCHAR(60) NOT NULL UNIQUE,
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      cycle VARCHAR(20) NOT NULL DEFAULT 'monthly',
+      status VARCHAR(30) NOT NULL DEFAULT 'draft',
+      total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      notes TEXT,
+      submitted_at TIMESTAMP,
+      approved_at TIMESTAMP,
+      approved_by_user_id INTEGER,
+      paid_at TIMESTAMP,
+      created_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS payout_batches_partner_idx ON payout_batches(partner_id);
+    CREATE INDEX IF NOT EXISTS payout_batches_status_idx ON payout_batches(status);
+
+    CREATE TABLE IF NOT EXISTS payout_batch_items (
+      id SERIAL PRIMARY KEY,
+      payout_batch_id INTEGER NOT NULL REFERENCES payout_batches(id) ON DELETE CASCADE,
+      sales_commission_id INTEGER NOT NULL REFERENCES sales_commissions(id),
+      amount NUMERIC(14,2) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS settlements (
+      id SERIAL PRIMARY KEY,
+      settlement_number VARCHAR(60) NOT NULL UNIQUE,
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      claim_id INTEGER REFERENCES claims(id),
+      net_due_to_company NUMERIC(14,2) NOT NULL DEFAULT 0,
+      partner_commission_total NUMERIC(14,2) NOT NULL DEFAULT 0,
+      final_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      direction VARCHAR(20) NOT NULL DEFAULT 'partner_to_company',
+      notes TEXT,
+      created_by_user_id INTEGER,
+      completed_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS settlements_partner_idx ON settlements(partner_id);
+
+    -- Phase 3 financial integrity: prevent duplicate financial rows / double-claim / double-payout.
+    CREATE UNIQUE INDEX IF NOT EXISTS order_payments_request_uniq ON order_payments(request_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS partner_commissions_request_uniq ON partner_commissions(request_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS sales_commissions_request_uniq ON sales_commissions(request_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS claim_items_pc_uniq ON claim_items(partner_commission_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS payout_batch_items_sc_uniq ON payout_batch_items(sales_commission_id);
   `);
 }
 
