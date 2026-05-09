@@ -89,7 +89,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     "reports:export",
   ],
   partner_admin: [
-    ...view("dashboard", "ownership", "reports"),
+    ...view("dashboard", "ownership", "reports", "packages"),
     ...all("users", "customers", "requests"),
     ...view("payments", "partner_commissions", "claims", "settlements", "audit_log"),
     "payments:change_status",
@@ -102,7 +102,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     "reports:export",
   ],
   partner_accountant: [
-    ...view("dashboard", "payments", "partner_commissions", "claims", "settlements", "reports"),
+    ...view("dashboard", "payments", "partner_commissions", "claims", "settlements", "reports", "packages"),
     "payments:change_status",
     "partner_commissions:change_status",
     "claims:create",
@@ -110,12 +110,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     "reports:export",
   ],
   team_leader: [
-    ...view("dashboard", "customers", "requests", "reports", "sales_commissions"),
+    ...view("dashboard", "customers", "requests", "reports", "sales_commissions", "packages"),
     "requests:create",
     "reports:view",
   ],
   sales: [
-    ...view("dashboard", "customers", "requests"),
+    ...view("dashboard", "customers", "requests", "packages"),
     "requests:create",
     "sales_commissions:view",
   ],

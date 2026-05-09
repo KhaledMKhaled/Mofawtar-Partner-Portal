@@ -8,6 +8,29 @@ import { audit } from "../audit.js";
 
 export const packagesRouter = Router();
 
+// True for roles that operate on behalf of a single partner. Such users must
+// have a partnerId; otherwise we fail closed.
+function isPartnerScoped(roleKey?: string | null): boolean {
+  return (
+    roleKey === "partner_admin" ||
+    roleKey === "partner_accountant" ||
+    roleKey === "team_leader" ||
+    roleKey === "sales"
+  );
+}
+
+// Returns true if the package is readable by the given partner.
+async function packageVisibleToPartner(packageId: number, partnerId: number): Promise<boolean> {
+  const [p] = await db.select().from(packages).where(eq(packages.id, packageId));
+  if (!p || !p.active) return false;
+  if (p.availableForAll) return true;
+  const [link] = await db
+    .select()
+    .from(packagePartners)
+    .where(and(eq(packagePartners.packageId, packageId), eq(packagePartners.partnerId, partnerId)));
+  return !!link;
+}
+
 const OPERATION_TYPES = [
   "new_subscription",
   "renewal",
@@ -21,15 +44,44 @@ packagesRouter.get("/operation-types", requirePerm("packages:view"), (_req, res)
   res.json(OPERATION_TYPES);
 });
 
-packagesRouter.get("/", requirePerm("packages:view"), async (_req, res) => {
+packagesRouter.get("/", requirePerm("packages:view"), async (req, res) => {
+  const cu = getUser(req)!;
+  // Partner-scoped users: must have a partnerId; only active packages that are
+  // availableForAll OR linked to their partner. Fail closed if partnerId missing.
+  if (isPartnerScoped(cu.roleKey)) {
+    if (!cu.partnerId) return res.status(403).json({ error: "forbidden" });
+    const linked = await db
+      .select({ packageId: packagePartners.packageId })
+      .from(packagePartners)
+      .where(eq(packagePartners.partnerId, cu.partnerId));
+    const linkedIds = new Set(linked.map((l) => l.packageId));
+    const all = await db.select().from(packages).orderBy(desc(packages.createdAt));
+    const filtered = all.filter((p) => p.active && (p.availableForAll || linkedIds.has(p.id)));
+    return res.json(filtered);
+  }
+  // Company-scoped users see everything.
   const list = await db.select().from(packages).orderBy(desc(packages.createdAt));
   res.json(list);
 });
 
 packagesRouter.get("/:id", requirePerm("packages:view"), async (req, res) => {
   const id = Number(req.params.id);
+  const cu = getUser(req)!;
   const [p] = await db.select().from(packages).where(eq(packages.id, id));
   if (!p) return res.status(404).json({ error: "not_found" });
+
+  if (isPartnerScoped(cu.roleKey)) {
+    if (!cu.partnerId) return res.status(403).json({ error: "forbidden" });
+    const visible = await packageVisibleToPartner(id, cu.partnerId);
+    if (!visible) return res.status(403).json({ error: "forbidden" });
+    // Hide cross-partner linkage; only return their own commission rules.
+    const rules = await db
+      .select()
+      .from(commissionRules)
+      .where(and(eq(commissionRules.packageId, id), eq(commissionRules.partnerId, cu.partnerId)));
+    return res.json({ ...p, partners: [], commissionRules: rules });
+  }
+
   const partnerLinks = await db
     .select({ partnerId: packagePartners.partnerId, partnerName: partners.name })
     .from(packagePartners)
@@ -135,6 +187,29 @@ const ruleInput = z.object({
 
 packagesRouter.get("/:id/commission-rules", requirePerm("packages:view"), async (req, res) => {
   const id = Number(req.params.id);
+  const cu = getUser(req)!;
+
+  if (isPartnerScoped(cu.roleKey)) {
+    if (!cu.partnerId) return res.status(403).json({ error: "forbidden" });
+    const visible = await packageVisibleToPartner(id, cu.partnerId);
+    if (!visible) return res.status(403).json({ error: "forbidden" });
+    const rows = await db
+      .select({
+        id: commissionRules.id,
+        packageId: commissionRules.packageId,
+        partnerId: commissionRules.partnerId,
+        partnerName: partners.name,
+        operationType: commissionRules.operationType,
+        partnerCommissionPct: commissionRules.partnerCommissionPct,
+        salesCommissionPct: commissionRules.salesCommissionPct,
+        active: commissionRules.active,
+      })
+      .from(commissionRules)
+      .innerJoin(partners, eq(partners.id, commissionRules.partnerId))
+      .where(and(eq(commissionRules.packageId, id), eq(commissionRules.partnerId, cu.partnerId)));
+    return res.json(rows);
+  }
+
   const rows = await db
     .select({
       id: commissionRules.id,
