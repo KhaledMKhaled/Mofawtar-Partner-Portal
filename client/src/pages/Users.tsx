@@ -83,10 +83,10 @@ export function UsersPage() {
   const [form, setForm] = useState<UserForm>(blank);
   const [error, setError] = useState<string | null>(null);
 
-  // For partner-scoped users use their own partnerId; for company super admin
-  // use whichever partner is currently selected in the form so the team-leader
-  // dropdown is scoped to that partner.
-  const tlPartnerId = me?.partnerId ?? form.partnerId;
+  // For partner-scoped users (partner_admin, team_leader, sales) their partner
+  // is fixed to me.partnerId. For company_super_admin the partner comes from
+  // the form so the team-leader dropdown is scoped to the selected partner.
+  const tlPartnerId = me?.roleKey === "company_super_admin" ? form.partnerId : me?.partnerId;
   const tlQ = useQuery({
     queryKey: ["team-leaders", tlPartnerId],
     queryFn: () => api<{ id: number; name: string }[]>(`/api/users/team-leaders?partnerId=${tlPartnerId}`),
@@ -141,8 +141,11 @@ export function UsersPage() {
   };
 
   const selectedRole = availableRoles.find((r) => r.id === form.roleId);
-  const showPartner = selectedRole?.scope === "partner" && me?.roleKey === "company_super_admin";
-  const showTeamLeader = selectedRole?.key === "sales";
+  // Always show the partner field for company_super_admin so they can set the
+  // partner before or after choosing a role.
+  const showPartner = me?.roleKey === "company_super_admin";
+  // Show team leader only when both a partner and the sales role are selected.
+  const showTeamLeader = selectedRole?.key === "sales" && !!tlPartnerId;
   const canCreate = can(me, "users:create");
   const canEdit = can(me, "users:edit");
 
@@ -229,7 +232,7 @@ export function UsersPage() {
           </Field>
           <Field label={t("common.role")} required>
             <select className="input" value={form.roleId}
-              onChange={(e) => setForm({ ...form, roleId: Number(e.target.value) })}>
+              onChange={(e) => setForm({ ...form, roleId: Number(e.target.value), teamLeaderId: null })}>
               <option value={0}>—</option>
               {availableRoles.map((r) => (
                 <option key={r.id} value={r.id}>{isAr ? r.nameAr : r.nameEn}</option>
@@ -237,7 +240,7 @@ export function UsersPage() {
             </select>
           </Field>
           {showPartner && (
-            <Field label={t("common.partner")} required>
+            <Field label={t("common.partner")}>
               <select className="input" value={form.partnerId ?? ""}
                 onChange={(e) => setForm({ ...form, partnerId: e.target.value ? Number(e.target.value) : null, teamLeaderId: null })}>
                 <option value="">—</option>
@@ -251,15 +254,9 @@ export function UsersPage() {
                 className="input"
                 value={form.teamLeaderId ?? ""}
                 onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}
-                disabled={!tlPartnerId || tlQ.isLoading}
+                disabled={tlQ.isLoading}
               >
-                <option value="">
-                  {!tlPartnerId
-                    ? t("users.selectPartnerFirst")
-                    : tlQ.isLoading
-                    ? t("common.loading")
-                    : "—"}
-                </option>
+                <option value="">{tlQ.isLoading ? t("common.loading") : "—"}</option>
                 {tlQ.data?.map((t2) => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
               </select>
             </Field>
