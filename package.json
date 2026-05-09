@@ -9,7 +9,8 @@
     "start": "NODE_ENV=production node dist/server/index.js",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx server/seed.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
