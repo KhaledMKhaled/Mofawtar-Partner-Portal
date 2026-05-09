@@ -75,6 +75,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ error: "unauthorized" });
   }
+  // Session has a userId but the user was not found in DB (e.g. after a
+  // data wipe). Destroy the stale session so the client gets a clean 401.
+  if (!req.currentUser) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: "unauthorized" });
+  }
   next();
 }
 

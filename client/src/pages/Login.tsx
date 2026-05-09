@@ -5,15 +5,6 @@ import { useCurrentUser, useLogin } from "../hooks/useAuth";
 import { Logo } from "../components/Logo";
 import { Globe } from "lucide-react";
 
-const DEMO_ACCOUNTS = [
-  { label: { en: "Company Super Admin", ar: "مدير عام الشركة" }, email: "superadmin@mofawter.com" },
-  { label: { en: "Company Accountant", ar: "محاسب الشركة" }, email: "accountant@mofawter.com" },
-  { label: { en: "Partner Admin", ar: "مدير الشريك" }, email: "partner.admin@demo.com" },
-  { label: { en: "Partner Accountant", ar: "محاسب الشريك" }, email: "partner.accountant@demo.com" },
-  { label: { en: "Team Leader", ar: "قائد الفريق" }, email: "team.leader@demo.com" },
-  { label: { en: "Sales", ar: "مندوب المبيعات" }, email: "sales@demo.com" },
-];
-const DEMO_PASSWORD = "password123";
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -133,32 +124,6 @@ export function LoginPage() {
               </Link>
             </form>
 
-            <div className="mt-8">
-              <div className="dashed-divider mb-4" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-3">
-                {t("auth.demoAccounts")}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {DEMO_ACCOUNTS.map((d) => (
-                  <button
-                    key={d.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(d.email);
-                      setPassword(DEMO_PASSWORD);
-                    }}
-                    className="text-start px-3 py-2 rounded-lg border border-border hover:border-violet hover:bg-magnolia/40 transition"
-                  >
-                    <div className="text-sm font-semibold text-ink">{isAr ? d.label.ar : d.label.en}</div>
-                    <div className="text-[11px] text-muted truncate" dir="ltr">{d.email}</div>
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted mt-3 text-center">
-                {isAr ? "كلمة المرور للجميع: " : "Password for all: "}
-                <span className="font-mono font-semibold text-ink">{DEMO_PASSWORD}</span>
-              </p>
-            </div>
           </div>
         </div>
       </div>

@@ -450,111 +450,19 @@ export async function runSeed() {
   }
 
   const [superAdminRole] = await db.select().from(roles).where(eq(roles.key, "company_super_admin"));
-  const [companyAccountantRole] = await db.select().from(roles).where(eq(roles.key, "company_accountant"));
-  const [partnerAdminRole] = await db.select().from(roles).where(eq(roles.key, "partner_admin"));
-  const [partnerAccountantRole] = await db.select().from(roles).where(eq(roles.key, "partner_accountant"));
-  const [teamLeaderRole] = await db.select().from(roles).where(eq(roles.key, "team_leader"));
-  const [salesRole] = await db.select().from(roles).where(eq(roles.key, "sales"));
 
-  // Demo partner
-  let [demoPartner] = await db.select().from(partners).where(eq(partners.code, "DEMO"));
-  if (!demoPartner) {
-    const inserted = await db
-      .insert(partners)
-      .values({
-        name: "Demo Partner",
-        code: "DEMO",
-        address: "Cairo, Egypt",
-        status: "active",
-        contractStartDate: new Date(),
-        partnerCommissionPct: "20",
-        commissionPeriodDays: 30,
-        safetyPeriodDays: 14,
-        claimCycleType: "auto",
-        claimCycleDays: 2,
-        salesCommissionEnabled: true,
-        salesCommissionPct: "5",
-        salesPayoutCycle: "monthly",
-        ownershipPeriodValue: 3,
-        ownershipPeriodUnit: "years",
-      })
-      .returning();
-    demoPartner = inserted[0];
-  }
-
-  // Demo users
-  const demoUsers: Array<{
-    name: string;
-    email: string;
-    password: string;
-    roleId: number;
-    partnerId: number | null;
-    teamLeaderId?: number | null;
-  }> = [
-    { name: "Company Super Admin", email: "superadmin@mofawter.com", password: "password123", roleId: superAdminRole.id, partnerId: null },
-    { name: "Company Accountant", email: "accountant@mofawter.com", password: "password123", roleId: companyAccountantRole.id, partnerId: null },
-    { name: "Demo Partner Admin", email: "partner.admin@demo.com", password: "password123", roleId: partnerAdminRole.id, partnerId: demoPartner.id },
-    { name: "Demo Partner Accountant", email: "partner.accountant@demo.com", password: "password123", roleId: partnerAccountantRole.id, partnerId: demoPartner.id },
-    { name: "Demo Team Leader", email: "team.leader@demo.com", password: "password123", roleId: teamLeaderRole.id, partnerId: demoPartner.id },
-  ];
-
-  let teamLeaderId: number | null = null;
-  for (const du of demoUsers) {
-    const existing = await db.select().from(users).where(eq(users.email, du.email));
-    if (!existing[0]) {
-      const hash = await hashPassword(du.password);
-      const [u] = await db
-        .insert(users)
-        .values({
-          name: du.name,
-          email: du.email,
-          passwordHash: hash,
-          roleId: du.roleId,
-          partnerId: du.partnerId,
-        })
-        .returning();
-      if (du.email === "team.leader@demo.com") teamLeaderId = u.id;
-    } else if (du.email === "team.leader@demo.com") {
-      teamLeaderId = existing[0].id;
-    }
-  }
-
-  const salesEmail = "sales@demo.com";
-  const existingSales = await db.select().from(users).where(eq(users.email, salesEmail));
-  if (!existingSales[0]) {
-    const hash = await hashPassword("password123");
+  // Superadmin user
+  const adminEmail = "A.Sirag@mofawter.com";
+  const existing = await db.select().from(users).where(eq(users.email, adminEmail));
+  if (!existing[0]) {
+    const hash = await hashPassword("123123123");
     await db.insert(users).values({
-      name: "Demo Sales",
-      email: salesEmail,
+      name: "A. Sirag",
+      email: adminEmail,
       passwordHash: hash,
-      roleId: salesRole.id,
-      partnerId: demoPartner.id,
-      teamLeaderId,
+      roleId: superAdminRole.id,
+      partnerId: null,
     });
-  }
-
-  // Packages
-  const seedPackages = [
-    { name: "Basic Package", desc: "Entry-level e-invoicing package", price: 1000, taxPct: 14, days: 365 },
-    { name: "Pro Package", desc: "Pro-tier e-invoicing package", price: 2000, taxPct: 14, days: 365 },
-    { name: "Add-on Package", desc: "Add-on services", price: 500, taxPct: 14, days: 365 },
-  ];
-  for (const sp of seedPackages) {
-    const existing = await db.select().from(packages).where(eq(packages.name, sp.name));
-    if (!existing[0]) {
-      const final = sp.price + (sp.price * sp.taxPct) / 100;
-      await db.insert(packages).values({
-        name: sp.name,
-        description: sp.desc,
-        itemPriceBeforeTax: String(sp.price),
-        taxPct: String(sp.taxPct),
-        finalPriceAfterTax: String(final),
-        durationDays: sp.days,
-        packageType: "subscription",
-        active: true,
-        availableForAll: true,
-      });
-    }
   }
 
   // Settings defaults
