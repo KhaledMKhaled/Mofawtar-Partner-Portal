@@ -222,28 +222,39 @@ reportsRouter.get("/:key/export.pdf", requirePerm("reports:export"), async (req,
   if (!REPORTS.includes(key)) return res.status(404).json({ error: "unknown_report" });
   const cu = getUser(req)!;
   const data = await fetchReport(key, readFilters(req, cu));
-  // Render a minimal printable HTML — clients can use the browser's "Save as PDF".
-  const esc = (v: unknown) => String(v ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
-  const head = data.headers.map((h) => `<th>${esc(h)}</th>`).join("");
-  const body = data.rows.map((r) => `<tr>${data.headers.map((h) => `<td>${esc((r as Record<string, unknown>)[h])}</td>`).join("")}</tr>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${key}</title>
-<style>
-  body{font-family:Inter,Arial,sans-serif;color:#0F1115;padding:24px}
-  h1{margin:0 0 8px;font-size:20px}
-  .meta{color:#5b6478;font-size:12px;margin-bottom:16px}
-  table{border-collapse:collapse;width:100%;font-size:12px}
-  th,td{border:1px solid #e5e7eb;padding:6px 8px;text-align:start}
-  th{background:#f6f6fb;color:#4046B5}
-  @media print{ .no-print{display:none} }
-</style>
-</head><body>
-  <h1>${key.replace(/_/g," ")}</h1>
-  <div class="meta">Generated ${new Date().toLocaleString()} · ${data.rows.length} rows</div>
-  <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-  <script>window.print && setTimeout(()=>window.print(), 200);</script>
-</body></html>`;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
+  // Real PDF binary using pdfkit (not an HTML print fallback).
+  const PDFDocument = (await import("pdfkit")).default;
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 28 });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${key}.pdf"`);
+  doc.pipe(res);
+  doc.fillColor("#4046B5").fontSize(16).text(key.replace(/_/g, " ").toUpperCase());
+  doc.moveDown(0.2).fillColor("#5b6478").fontSize(9).text(`Generated ${new Date().toLocaleString()} · ${data.rows.length} rows`);
+  doc.moveDown(0.6);
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colW = data.headers.length > 0 ? pageWidth / data.headers.length : pageWidth;
+  const drawRow = (cells: string[], opts: { header?: boolean } = {}) => {
+    const startX = doc.page.margins.left;
+    const y = doc.y;
+    if (opts.header) doc.fillColor("#4046B5").fontSize(9);
+    else doc.fillColor("#0F1115").fontSize(8);
+    let maxH = 0;
+    cells.forEach((c, i) => {
+      const h = doc.heightOfString(c, { width: colW - 4 });
+      if (h > maxH) maxH = h;
+    });
+    cells.forEach((c, i) => {
+      doc.text(c, startX + i * colW + 2, y + 2, { width: colW - 4 });
+    });
+    doc.moveTo(startX, y + maxH + 6).lineTo(startX + pageWidth, y + maxH + 6).strokeColor("#e5e7eb").stroke();
+    doc.y = y + maxH + 8;
+    if (doc.y > doc.page.height - doc.page.margins.bottom - 30) doc.addPage();
+  };
+  drawRow(data.headers.map(String), { header: true });
+  for (const r of data.rows) {
+    drawRow(data.headers.map((h) => String((r as Record<string, unknown>)[h] ?? "")));
+  }
+  doc.end();
 });
 
 // Aggregate KPIs for the dashboard, role-tailored.

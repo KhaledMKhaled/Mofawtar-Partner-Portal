@@ -364,6 +364,13 @@ export const en = {
     gross: "Gross",
     commission: "Partner commission",
     netDue: "Net due",
+    netAmount: "Net amount",
+    tax: "Tax",
+    receivedAt: "Received at",
+    settledAt: "Settled at",
+    breakdown: "Payment breakdown",
+    history: "Status history",
+    transition: "Transition",
   },
   partnerCommissions: {
     subtitle: "Commissions earned per activated request.",

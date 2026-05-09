@@ -20,6 +20,7 @@ import { RequestDetailPage } from "./pages/RequestDetail";
 import { OwnershipPage } from "./pages/Ownership";
 import { NotificationsPage } from "./pages/Notifications";
 import { PaymentsPage } from "./pages/Payments";
+import { PaymentDetailPage } from "./pages/PaymentDetail";
 import { PartnerCommissionsPage } from "./pages/PartnerCommissions";
 import { SalesCommissionsPage } from "./pages/SalesCommissions";
 import { ClaimsPage, ClaimDetailPage } from "./pages/Claims";
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/ownership" element={<Gate module="ownership"><OwnershipPage /></Gate>} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/payments" element={<Gate module="payments"><PaymentsPage /></Gate>} />
+        <Route path="/payments/:id" element={<Gate module="payments"><PaymentDetailPage /></Gate>} />
         <Route path="/partner-commissions" element={<Gate module="partner_commissions"><PartnerCommissionsPage /></Gate>} />
         <Route path="/sales-commissions" element={<Gate module="sales_commissions"><SalesCommissionsPage /></Gate>} />
         <Route path="/claims" element={<Gate module="claims"><ClaimsPage /></Gate>} />

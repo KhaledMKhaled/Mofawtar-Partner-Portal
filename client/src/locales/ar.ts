@@ -366,6 +366,13 @@ export const ar: Translations = {
     gross: "الإجمالي",
     commission: "عمولة الشريك",
     netDue: "صافي مستحق",
+    netAmount: "الصافي",
+    tax: "الضريبة",
+    receivedAt: "تاريخ الاستلام",
+    settledAt: "تاريخ التسوية",
+    breakdown: "تفصيل الدفعة",
+    history: "سجل الحالات",
+    transition: "التحويل",
   },
   partnerCommissions: {
     subtitle: "العمولات المستحقة لكل طلب مفعَّل.",

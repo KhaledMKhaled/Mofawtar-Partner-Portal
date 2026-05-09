@@ -89,7 +89,7 @@ export function PaymentsPage() {
               const visibleAllowed = allowed.filter((s) => isCompany || (s !== "received_by_company" && s !== "settled"));
               return (
                 <tr key={r.id}>
-                  <td className="font-mono text-xs"><Link to={`/requests/${r.requestId}`} className="text-violet-700 hover:underline">{r.srNumber ?? `#${r.requestId}`}</Link></td>
+                  <td className="font-mono text-xs"><Link to={`/payments/${r.id}`} className="text-violet-700 hover:underline">{r.srNumber ?? `#${r.requestId}`}</Link></td>
                   <td>{r.customerName}</td>
                   <td>{r.partnerName}</td>
                   <td className="text-end font-mono">{fmtMoney(r.grossAmount)}</td>
