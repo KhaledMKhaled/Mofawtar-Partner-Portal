@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { customerOwnership, customers, partners, users } from "../schema.js";
+import { customerOwnership, customers, partners, users, requests as requestsTbl } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { audit } from "../audit.js";
 import { notify } from "../notify.js";
@@ -193,6 +193,25 @@ ownershipRouter.post("/housekeep", requirePerm("ownership:manage"), async (_req,
 });
 
 ownershipRouter.get("/customer/:id/current", requirePerm("customers:view"), async (req, res) => {
-  const owner = await getOwnerAt(Number(req.params.id));
+  const cu = getUser(req)!;
+  const customerId = Number(req.params.id);
+  // Partner-scoped users may only probe customers their partner has either
+  // owned or has a request for.
+  if (cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
+    const [hasOwner] = await db
+      .select({ id: customerOwnership.id })
+      .from(customerOwnership)
+      .where(and(eq(customerOwnership.customerId, customerId), eq(customerOwnership.partnerId, cu.partnerId)))
+      .limit(1);
+    if (!hasOwner) {
+      const [hasReq] = await db
+        .select({ id: requestsTbl.id })
+        .from(requestsTbl)
+        .where(and(eq(requestsTbl.customerId, customerId), eq(requestsTbl.partnerId, cu.partnerId)))
+        .limit(1);
+      if (!hasReq) return res.status(403).json({ error: "forbidden" });
+    }
+  }
+  const owner = await getOwnerAt(customerId);
   res.json(owner);
 });

@@ -103,6 +103,15 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     if (!hasReq) return res.status(403).json({ error: "forbidden" });
   }
 
+  // Partner-scoped users may only see requests their partner created.
+  // Company users see everything.
+  const partnerScoped =
+    cu.partnerId &&
+    cu.roleKey !== "company_super_admin" &&
+    cu.roleKey !== "company_accountant";
+  const reqsWhere = partnerScoped
+    ? and(eq(requests.customerId, id), eq(requests.partnerId, cu.partnerId!))
+    : eq(requests.customerId, id);
   const reqs = await db
     .select({
       id: requests.id,
@@ -123,7 +132,7 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     .leftJoin(partners, eq(partners.id, requests.partnerId))
     .leftJoin(packages, eq(packages.id, requests.packageId))
     .leftJoin(users, eq(users.id, requests.salesUserId))
-    .where(eq(requests.customerId, id))
+    .where(reqsWhere)
     .orderBy(desc(requests.createdAt));
 
   const timeline = await db
@@ -140,7 +149,9 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     .from(requestStatusHistory)
     .leftJoin(users, eq(users.id, requestStatusHistory.changedByUserId))
     .where(
-      sql`${requestStatusHistory.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id})`,
+      partnerScoped
+        ? sql`${requestStatusHistory.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id} AND partner_id = ${cu.partnerId})`
+        : sql`${requestStatusHistory.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id})`,
     )
     .orderBy(desc(requestStatusHistory.createdAt))
     .limit(200);
@@ -158,7 +169,9 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     .from(requestReassignments)
     .leftJoin(users, eq(users.id, requestReassignments.byUserId))
     .where(
-      sql`${requestReassignments.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id})`,
+      partnerScoped
+        ? sql`${requestReassignments.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id} AND partner_id = ${cu.partnerId})`
+        : sql`${requestReassignments.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id})`,
     )
     .orderBy(desc(requestReassignments.createdAt))
     .limit(100);
@@ -173,7 +186,11 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     })
     .from(auditLog)
     .leftJoin(users, eq(users.id, auditLog.userId))
-    .where(eq(auditLog.customerId, id))
+    .where(
+      partnerScoped
+        ? and(eq(auditLog.customerId, id), eq(auditLog.partnerId, cu.partnerId!))
+        : eq(auditLog.customerId, id),
+    )
     .orderBy(desc(auditLog.createdAt))
     .limit(100);
 
