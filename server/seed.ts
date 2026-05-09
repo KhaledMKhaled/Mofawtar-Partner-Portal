@@ -73,9 +73,25 @@ export async function ensureSchema() {
       package_type VARCHAR(50) NOT NULL DEFAULT 'subscription',
       active BOOLEAN NOT NULL DEFAULT TRUE,
       available_for_all BOOLEAN NOT NULL DEFAULT TRUE,
+      default_partner_commission_pct NUMERIC(6,3) NOT NULL DEFAULT 0,
+      default_sales_commission_pct NUMERIC(6,3) NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE packages
+      ADD COLUMN IF NOT EXISTS default_partner_commission_pct NUMERIC(6,3) NOT NULL DEFAULT 0;
+    ALTER TABLE packages
+      ADD COLUMN IF NOT EXISTS default_sales_commission_pct NUMERIC(6,3) NOT NULL DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS team_assignments (
+      team_leader_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      sales_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      partner_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (team_leader_id, sales_user_id)
+    );
+    CREATE INDEX IF NOT EXISTS team_assignments_partner_idx ON team_assignments(partner_id);
+    CREATE INDEX IF NOT EXISTS team_assignments_sales_idx ON team_assignments(sales_user_id);
 
     CREATE TABLE IF NOT EXISTS package_partners (
       package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,

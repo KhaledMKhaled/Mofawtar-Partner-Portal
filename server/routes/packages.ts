@@ -48,7 +48,9 @@ const pkgInput = z.object({
   packageType: z.string().default("subscription"),
   active: z.boolean().default(true),
   availableForAll: z.boolean().default(true),
-  partnerIds: z.array(z.coerce.number().int()).optional().default([]),
+  defaultPartnerCommissionPct: z.coerce.number().min(0).max(100).default(0),
+  defaultSalesCommissionPct: z.coerce.number().min(0).max(100).default(0),
+  partnerIds: z.array(z.coerce.number().int()).optional(),
 });
 
 function finalPrice(item: number, tax: number) {
@@ -73,10 +75,13 @@ packagesRouter.post("/", requirePerm("packages:create"), async (req, res) => {
       packageType: d.packageType,
       active: d.active,
       availableForAll: d.availableForAll,
+      defaultPartnerCommissionPct: String(d.defaultPartnerCommissionPct),
+      defaultSalesCommissionPct: String(d.defaultSalesCommissionPct),
     })
     .returning();
-  if (!d.availableForAll && d.partnerIds.length) {
-    await db.insert(packagePartners).values(d.partnerIds.map((pid) => ({ packageId: p.id, partnerId: pid })));
+  const ids = d.partnerIds ?? [];
+  if (!d.availableForAll && ids.length) {
+    await db.insert(packagePartners).values(ids.map((pid) => ({ packageId: p.id, partnerId: pid })));
   }
   await audit({ userId: cu.id, action: "package.created", entityType: "package", entityId: p.id, newValue: p });
   res.status(201).json(p);
@@ -90,16 +95,25 @@ packagesRouter.patch("/:id", requirePerm("packages:edit"), async (req, res) => {
   const [old] = await db.select().from(packages).where(eq(packages.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
   const d = parsed.data;
-  const update: any = { updatedAt: new Date() };
+  const update: Partial<typeof packages.$inferInsert> = { updatedAt: new Date() };
   const item = d.itemPriceBeforeTax ?? Number(old.itemPriceBeforeTax);
   const tax = d.taxPct ?? Number(old.taxPct);
   if (d.itemPriceBeforeTax !== undefined) update.itemPriceBeforeTax = String(d.itemPriceBeforeTax);
   if (d.taxPct !== undefined) update.taxPct = String(d.taxPct);
   if (d.itemPriceBeforeTax !== undefined || d.taxPct !== undefined) update.finalPriceAfterTax = String(finalPrice(item, tax));
-  for (const k of ["name", "description", "durationDays", "packageType", "active", "availableForAll"] as const) {
-    if ((d as any)[k] !== undefined) update[k] = (d as any)[k];
-  }
+  if (d.name !== undefined) update.name = d.name;
+  if (d.description !== undefined) update.description = d.description;
+  if (d.durationDays !== undefined) update.durationDays = d.durationDays;
+  if (d.packageType !== undefined) update.packageType = d.packageType;
+  if (d.active !== undefined) update.active = d.active;
+  if (d.availableForAll !== undefined) update.availableForAll = d.availableForAll;
+  if (d.defaultPartnerCommissionPct !== undefined)
+    update.defaultPartnerCommissionPct = String(d.defaultPartnerCommissionPct);
+  if (d.defaultSalesCommissionPct !== undefined)
+    update.defaultSalesCommissionPct = String(d.defaultSalesCommissionPct);
   const [p] = await db.update(packages).set(update).where(eq(packages.id, id)).returning();
+  // Only touch partner availability links when the client explicitly sent
+  // partnerIds — never silently wipe existing assignments.
   if (d.partnerIds !== undefined) {
     await db.delete(packagePartners).where(eq(packagePartners.packageId, id));
     if (!p.availableForAll && d.partnerIds.length) {

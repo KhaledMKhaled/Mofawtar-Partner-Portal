@@ -19,11 +19,32 @@ interface Pkg {
   packageType: string;
   active: boolean;
   availableForAll: boolean;
+  defaultPartnerCommissionPct: string;
+  defaultSalesCommissionPct: string;
+}
+
+interface PkgDetail extends Pkg {
+  partners: { partnerId: number; partnerName: string }[];
 }
 
 interface Partner { id: number; name: string }
 
-const blank = {
+interface PkgForm {
+  name: string;
+  description: string;
+  itemPriceBeforeTax: number;
+  taxPct: number;
+  durationDays: number;
+  packageType: string;
+  active: boolean;
+  availableForAll: boolean;
+  defaultPartnerCommissionPct: number;
+  defaultSalesCommissionPct: number;
+  partnerIds: number[];
+  partnerIdsTouched: boolean;
+}
+
+const blank: PkgForm = {
   name: "",
   description: "",
   itemPriceBeforeTax: 0,
@@ -32,7 +53,10 @@ const blank = {
   packageType: "subscription",
   active: true,
   availableForAll: true,
-  partnerIds: [] as number[],
+  defaultPartnerCommissionPct: 0,
+  defaultSalesCommissionPct: 0,
+  partnerIds: [],
+  partnerIdsTouched: false,
 };
 
 export function PackagesPage() {
@@ -54,32 +78,56 @@ export function PackagesPage() {
   );
 
   const create = useMutation({
-    mutationFn: (data: any) => api("/api/packages", { method: "POST", json: data }),
+    mutationFn: (data: Record<string, unknown>) => api("/api/packages", { method: "POST", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["packages"] }); setOpen(false); },
   });
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => api(`/api/packages/${id}`, { method: "PATCH", json: data }),
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      api(`/api/packages/${id}`, { method: "PATCH", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["packages"] }); setOpen(false); },
   });
 
   const onNew = () => { setEditing(null); setForm(blank); setError(null); setOpen(true); };
-  const onEdit = (p: Pkg) => {
+  const onEdit = async (p: Pkg) => {
     setEditing(p);
-    setForm({
-      name: p.name, description: p.description || "",
-      itemPriceBeforeTax: Number(p.itemPriceBeforeTax), taxPct: Number(p.taxPct),
-      durationDays: p.durationDays, packageType: p.packageType,
-      active: p.active, availableForAll: p.availableForAll, partnerIds: [],
-    });
     setError(null);
-    setOpen(true);
+    // Hydrate the form (including existing partner availability) from the
+    // detail endpoint so saving an edit never silently wipes assignments.
+    try {
+      const detail = await api<PkgDetail>(`/api/packages/${p.id}`);
+      setForm({
+        name: detail.name,
+        description: detail.description || "",
+        itemPriceBeforeTax: Number(detail.itemPriceBeforeTax),
+        taxPct: Number(detail.taxPct),
+        durationDays: detail.durationDays,
+        packageType: detail.packageType,
+        active: detail.active,
+        availableForAll: detail.availableForAll,
+        defaultPartnerCommissionPct: Number(detail.defaultPartnerCommissionPct),
+        defaultSalesCommissionPct: Number(detail.defaultSalesCommissionPct),
+        partnerIds: detail.partners.map((x) => x.partnerId),
+        partnerIdsTouched: false,
+      });
+      setOpen(true);
+    } catch {
+      setError(t("common.failed"));
+    }
   };
   const submit = async () => {
     setError(null);
+    // Only send partnerIds when the user actually touched the selection or
+    // when creating a brand-new package.
+    const { partnerIdsTouched, partnerIds, ...rest } = form;
+    const payload: Record<string, unknown> = { ...rest };
+    if (!editing || partnerIdsTouched) payload.partnerIds = partnerIds;
     try {
-      if (editing) await update.mutateAsync({ id: editing.id, data: form });
-      else await create.mutateAsync(form);
-    } catch (e: any) { setError(e?.body?.error || e?.message || "failed"); }
+      if (editing) await update.mutateAsync({ id: editing.id, data: payload });
+      else await create.mutateAsync(payload);
+    } catch (e) {
+      const err = e as { body?: { error?: string }; message?: string };
+      setError(err?.body?.error || err?.message || "failed");
+    }
   };
 
   const canCreate = can(user, "packages:create");
@@ -190,6 +238,16 @@ export function PackagesPage() {
               <span>{form.availableForAll ? t("common.yes") : t("common.no")}</span>
             </label>
           </Field>
+          <Field label={t("packages.defaultPartnerCommissionPct")}>
+            <input type="number" step="0.01" min={0} max={100} className="input"
+              value={form.defaultPartnerCommissionPct}
+              onChange={(e) => setForm({ ...form, defaultPartnerCommissionPct: Number(e.target.value) })} />
+          </Field>
+          <Field label={t("packages.defaultSalesCommissionPct")}>
+            <input type="number" step="0.01" min={0} max={100} className="input"
+              value={form.defaultSalesCommissionPct}
+              onChange={(e) => setForm({ ...form, defaultSalesCommissionPct: Number(e.target.value) })} />
+          </Field>
           {!form.availableForAll && (
             <Field label={t("packages.selectPartners")} className="md:col-span-2">
               <select multiple className="input min-h-[120px]"
@@ -198,6 +256,7 @@ export function PackagesPage() {
                   setForm({
                     ...form,
                     partnerIds: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
+                    partnerIdsTouched: true,
                   })
                 }>
                 {partnersQ.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

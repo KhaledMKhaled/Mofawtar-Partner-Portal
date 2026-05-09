@@ -94,9 +94,29 @@ export const packages = pgTable("packages", {
   packageType: varchar("package_type", { length: 50 }).notNull().default("subscription"),
   active: boolean("active").notNull().default(true),
   availableForAll: boolean("available_for_all").notNull().default(true),
+  // Default commission rates applied when no per-partner/per-operation
+  // commission_rules override exists for this package.
+  defaultPartnerCommissionPct: numeric("default_partner_commission_pct", { precision: 6, scale: 3 })
+    .notNull()
+    .default("0"),
+  defaultSalesCommissionPct: numeric("default_sales_commission_pct", { precision: 6, scale: 3 })
+    .notNull()
+    .default("0"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Sales reps belonging to one or more team leaders within a partner.
+export const teamAssignments = pgTable(
+  "team_assignments",
+  {
+    teamLeaderId: integer("team_leader_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    salesUserId: integer("sales_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.teamLeaderId, t.salesUserId] }) })
+);
 
 export const packagePartners = pgTable(
   "package_partners",

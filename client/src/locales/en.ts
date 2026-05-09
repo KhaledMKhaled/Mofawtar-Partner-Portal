@@ -157,6 +157,8 @@ export const en = {
     commissionRules: "Commission rules",
     operationType: "Operation type",
     addRule: "Add rule",
+    defaultPartnerCommissionPct: "Default partner commission %",
+    defaultSalesCommissionPct: "Default sales commission %",
   },
   settings: {
     title: "Settings",

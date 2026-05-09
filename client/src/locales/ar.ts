@@ -159,6 +159,8 @@ export const ar: Translations = {
     commissionRules: "قواعد العمولات",
     operationType: "نوع العملية",
     addRule: "إضافة قاعدة",
+    defaultPartnerCommissionPct: "نسبة عمولة الشريك الافتراضية %",
+    defaultSalesCommissionPct: "نسبة عمولة المبيعات الافتراضية %",
   },
   settings: {
     title: "الإعدادات",

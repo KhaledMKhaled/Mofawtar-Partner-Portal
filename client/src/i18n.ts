@@ -4,6 +4,10 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import { en } from "./locales/en";
 import { ar } from "./locales/ar";
 
+// Arabic (RTL) is the product default. We honour an explicit language saved
+// in localStorage (the user's previous toggle), but we never auto-detect from
+// the browser — that's how an English browser was previously overriding the
+// product default on first load.
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -12,10 +16,11 @@ i18n
       en: { translation: en },
       ar: { translation: ar },
     },
+    lng: "ar",
     fallbackLng: "ar",
     supportedLngs: ["ar", "en"],
     interpolation: { escapeValue: false },
-    detection: { order: ["localStorage", "navigator"], caches: ["localStorage"] },
+    detection: { order: ["localStorage"], caches: ["localStorage"] },
   });
 
 function applyDirection(lng: string) {
