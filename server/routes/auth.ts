@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { db } from "../db.js";
-import { users } from "../schema.js";
-import { eq } from "drizzle-orm";
+import { users, passwordResets } from "../schema.js";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   hashPassword,
   loadCurrentUser,
@@ -63,10 +64,76 @@ authRouter.post("/change-password", requireAuth, async (req, res) => {
 
 const forgotSchema = z.object({ email: z.string().email() });
 
-// Demo-mode forgot/reset: in this phase, returns a deterministic token tied to the email
-// so the demo flow works without an email provider. Real email/SMS is out of scope.
+// Demo-mode forgot/reset: when the email exists, mint a reset token and return it
+// directly in the response so the bundled UI flow works without an email provider.
+// In production this token would be emailed/SMS'd to the user instead of returned.
 authRouter.post("/forgot-password", async (req, res) => {
   const parsed = forgotSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_input" });
-  res.json({ ok: true, demoNote: "In this demo, please contact your administrator to reset the password." });
+  const email = parsed.data.email.toLowerCase();
+  const [u] = await db.select().from(users).where(eq(users.email, email));
+  if (!u || u.status !== "active") {
+    // Don't leak which emails exist.
+    return res.json({ ok: true });
+  }
+  const token = randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  await db.insert(passwordResets).values({ userId: u.id, token, expiresAt });
+  await audit({
+    userId: u.id,
+    action: "user.password_reset_requested",
+    entityType: "user",
+    entityId: u.id,
+  });
+  // Only expose the token to the client in non-production so the bundled demo
+  // flow can complete without an email provider. In production this token must
+  // be delivered out-of-band (email/SMS) and never echoed in API responses.
+  const isProd = process.env.NODE_ENV === "production";
+  if (isProd) {
+    return res.json({ ok: true });
+  }
+  res.json({
+    ok: true,
+    demoToken: token,
+    demoNote: "In production this link would be emailed to the user.",
+  });
+});
+
+const resetSchema = z.object({
+  token: z.string().min(20),
+  newPassword: z.string().min(8),
+});
+
+authRouter.post("/reset-password", async (req, res) => {
+  const parsed = resetSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_input" });
+  const { token, newPassword } = parsed.data;
+  const now = new Date();
+  const [row] = await db
+    .select()
+    .from(passwordResets)
+    .where(
+      and(
+        eq(passwordResets.token, token),
+        isNull(passwordResets.usedAt),
+        gt(passwordResets.expiresAt, now),
+      ),
+    );
+  if (!row) return res.status(400).json({ error: "invalid_or_expired_token" });
+  const hash = await hashPassword(newPassword);
+  await db
+    .update(users)
+    .set({ passwordHash: hash, updatedAt: now })
+    .where(eq(users.id, row.userId));
+  await db
+    .update(passwordResets)
+    .set({ usedAt: now })
+    .where(eq(passwordResets.id, row.id));
+  await audit({
+    userId: row.userId,
+    action: "user.password_reset",
+    entityType: "user",
+    entityId: row.userId,
+  });
+  res.json({ ok: true });
 });

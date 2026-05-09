@@ -74,6 +74,15 @@ export const users = pgTable(
   })
 );
 
+export const passwordResets = pgTable("password_resets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const packages = pgTable("packages", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 200 }).notNull(),

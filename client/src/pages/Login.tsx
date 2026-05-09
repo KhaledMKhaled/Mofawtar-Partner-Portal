@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useCurrentUser, useLogin } from "../hooks/useAuth";
 import { Logo } from "../components/Logo";
@@ -126,7 +126,9 @@ export function LoginPage() {
               >
                 {login.isPending ? t("common.loading") : t("auth.signIn")}
               </button>
-              <p className="text-xs text-muted text-center mt-2">{t("auth.forgotNote")}</p>
+              <Link to="/forgot-password" className="block text-center text-xs text-violet hover:underline mt-2">
+                {t("auth.forgot")}
+              </Link>
             </form>
 
             <div className="mt-8">

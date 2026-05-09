@@ -2,6 +2,9 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useCurrentUser, canModule } from "./hooks/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/Login";
+import { ForgotPasswordPage } from "./pages/ForgotPassword";
+import { ResetPasswordPage } from "./pages/ResetPassword";
+import { ChangePasswordPage } from "./pages/ChangePassword";
 import { DashboardPage } from "./pages/Dashboard";
 import { PartnersPage } from "./pages/Partners";
 import { UsersPage } from "./pages/Users";
@@ -39,6 +42,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         element={
           <Protected>
@@ -47,6 +52,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="/account/password" element={<ChangePasswordPage />} />
         <Route path="/partners" element={<Gate module="partners"><PartnersPage /></Gate>} />
         <Route path="/users" element={<Gate module="users"><UsersPage /></Gate>} />
         <Route path="/roles" element={<Gate module="roles"><RolesPage /></Gate>} />

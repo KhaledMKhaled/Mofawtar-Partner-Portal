@@ -22,12 +22,15 @@ import {
   UserCircle2,
   Search,
 } from "lucide-react";
-import { useCurrentUser, useLogout } from "../hooks/useAuth";
-import { Logo, LogoMark } from "./Logo";
-import { DEFAULT_NAVIGATION, type Module } from "@shared/permissions";
+import type { ComponentType, SVGProps } from "react";
+import { useCurrentUser, useLogout, canModule } from "../hooks/useAuth";
+import { LogoMark } from "./Logo";
+import { MODULES, type Module } from "@shared/permissions";
 import { useState } from "react";
 
-const ICONS: Record<Module, any> = {
+type IconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+const ICONS: Record<Module, IconType> = {
   dashboard: LayoutDashboard,
   partners: Building2,
   users: Users,
@@ -78,7 +81,11 @@ export function AppShell() {
 
   if (!user) return null;
   const isAr = i18n.language?.startsWith("ar");
-  const navItems = DEFAULT_NAVIGATION[user.roleKey as keyof typeof DEFAULT_NAVIGATION] || ["dashboard"];
+  // Derive sidebar from the user's actual permissions so custom roles and
+  // edited system roles always show the right menu.
+  const navItems: Module[] = MODULES.filter(
+    (m) => ROUTES[m] && canModule(user, m),
+  );
 
   const toggleLang = () => i18n.changeLanguage(isAr ? "en" : "ar");
 
@@ -94,7 +101,7 @@ export function AppShell() {
         </div>
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {navItems.map((mod) => {
-            const Icon = ICONS[mod] ?? LayoutDashboard;
+            const Icon: IconType = ICONS[mod] ?? LayoutDashboard;
             const path = ROUTES[mod] || "/";
             return (
               <NavLink
@@ -160,6 +167,16 @@ export function AppShell() {
               >
                 <div className="px-3 py-2 text-xs text-muted">{user.email}</div>
                 <div className="dashed-divider my-1" />
+                <button
+                  className="w-full text-start px-3 py-2 rounded-md hover:bg-magnolia text-sm flex items-center gap-2"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate("/account/password");
+                  }}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  {t("auth.changePassword")}
+                </button>
                 <button
                   className="w-full text-start px-3 py-2 rounded-md hover:bg-magnolia text-sm flex items-center gap-2"
                   onClick={async () => {
