@@ -145,6 +145,7 @@ export const en = {
     teamLeader: "Team leader",
     none: "—",
     selectPartnerFirst: "Select a partner first",
+    noTeamLeadersForPartner: "No team leaders exist for this partner — create one first",
     cannotEditOwnRole: "You cannot change your own role",
     cannotEditOwnStatus: "You cannot change your own account status",
   },

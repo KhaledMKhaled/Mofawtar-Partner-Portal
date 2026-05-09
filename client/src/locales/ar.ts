@@ -147,6 +147,7 @@ export const ar: Translations = {
     teamLeader: "قائد الفريق",
     none: "—",
     selectPartnerFirst: "اختر الشريك أولاً",
+    noTeamLeadersForPartner: "لا يوجد قادة فرق لهذا الشريك — أنشئ قائد فريق أولاً",
     cannotEditOwnRole: "لا يمكنك تغيير دورك الخاص",
     cannotEditOwnStatus: "لا يمكنك تغيير حالة حسابك",
   },

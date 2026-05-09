@@ -137,8 +137,16 @@ export function UsersPage() {
   const selectedRole = availableRoles.find((r) => r.id === form.roleId);
   // Show partner field for any user without a fixed partner (company-scoped roles).
   const showPartner = !me?.partnerId;
-  // Show team leader only when the sales role is selected and a partner is resolved.
-  const showTeamLeader = selectedRole?.key === "sales" && !!tlPartnerId;
+  // Partner is required when the chosen role is partner-scoped.
+  const partnerRequired = selectedRole?.scope === "partner";
+  // Show team leader whenever the sales role is selected — even before a partner
+  // is chosen, so the user understands the dependency via the hint.
+  const showTeamLeader = selectedRole?.key === "sales";
+  const teamLeaderHint = !tlPartnerId
+    ? t("users.selectPartnerFirst")
+    : !tlQ.isLoading && (tlQ.data?.length ?? 0) === 0
+      ? t("users.noTeamLeadersForPartner")
+      : undefined;
   // If the current user is a team leader they can only assign themselves.
   const isTeamLeader = me?.roleKey === "team_leader";
   // Self-edit protection: cannot change own role or status.
@@ -246,7 +254,7 @@ export function UsersPage() {
             </select>
           </Field>
           {showPartner && (
-            <Field label={t("common.partner")}>
+            <Field label={t("common.partner")} required={partnerRequired}>
               <select className="input" value={form.partnerId ?? ""}
                 onChange={(e) => setForm({ ...form, partnerId: e.target.value ? Number(e.target.value) : null, teamLeaderId: null })}>
                 <option value="">—</option>
@@ -255,7 +263,7 @@ export function UsersPage() {
             </Field>
           )}
           {showTeamLeader && (
-            <Field label={t("users.teamLeader")}>
+            <Field label={t("users.teamLeader")} hint={teamLeaderHint}>
               {isTeamLeader ? (
                 // Team leaders can only assign themselves — show their name read-only.
                 <input className="input bg-gray-50 cursor-not-allowed" value={me?.name ?? ""} disabled readOnly />
@@ -264,7 +272,7 @@ export function UsersPage() {
                   className="input"
                   value={form.teamLeaderId ?? ""}
                   onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}
-                  disabled={tlQ.isLoading}
+                  disabled={!tlPartnerId || tlQ.isLoading}
                 >
                   <option value="">{tlQ.isLoading ? t("common.loading") : "—"}</option>
                   {tlQ.data?.map((t2) => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
