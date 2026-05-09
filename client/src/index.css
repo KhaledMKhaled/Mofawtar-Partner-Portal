@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --violet: #4046b5;
+  --magnolia: #ececf7;
+  --ink: #07081a;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", "IBM Plex Sans Arabic", "Dubai", system-ui, sans-serif;
+  background: #f6f6fb;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html[dir="rtl"] body {
+  font-family: "IBM Plex Sans Arabic", "Dubai", "Inter", system-ui, sans-serif;
+}
+
+@layer components {
+  .stamp-card {
+    @apply rounded-stamp bg-white border border-border shadow-soft;
+  }
+  .dashed-divider {
+    @apply h-px w-full text-violet-300 bg-dashed-x bg-[length:12px_1px] bg-no-repeat bg-center;
+  }
+  .dashed-divider-v {
+    @apply w-px self-stretch text-violet-300;
+    background-image: repeating-linear-gradient(180deg, currentColor 0 6px, transparent 6px 12px);
+    background-size: 1px 12px;
+  }
+  .stat-card {
+    @apply stamp-card p-5 flex flex-col gap-2;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .pill-violet { @apply pill bg-violet-50 text-violet-700; }
+  .pill-success { @apply pill bg-green-50 text-green-700; }
+  .pill-warning { @apply pill bg-amber-50 text-amber-700; }
+  .pill-danger { @apply pill bg-red-50 text-red-700; }
+  .pill-muted { @apply pill bg-slate-100 text-slate-600; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-violet text-white hover:bg-violet-600 active:bg-violet-700; }
+  .btn-secondary { @apply btn bg-magnolia text-violet-700 hover:bg-violet-100; }
+  .btn-ghost { @apply btn text-ink hover:bg-magnolia; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-outline { @apply btn border border-border text-ink hover:bg-magnolia; }
+
+  .input {
+    @apply w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet/30 focus:border-violet placeholder:text-slate-400;
+  }
+  .label {
+    @apply block text-sm font-medium text-ink mb-1.5;
+  }
+  .form-row { @apply grid grid-cols-1 md:grid-cols-2 gap-4; }
+
+  .table-wrap { @apply stamp-card overflow-hidden; }
+  .table { @apply w-full text-sm; }
+  .table thead th {
+    @apply text-start px-4 py-3 bg-magnolia/60 text-ink font-semibold uppercase tracking-wide text-xs border-b border-border;
+  }
+  .table tbody td {
+    @apply px-4 py-3 border-b border-border/70 align-middle;
+  }
+  .table tbody tr:last-child td { border-bottom: 0; }
+  .table tbody tr:hover { @apply bg-magnolia/40; }
+}
+
+/* Brand stamp logo box (used in AppShell + login) */
+.stamp-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 2px solid #4046b5;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #4046b5;
+  transform: rotate(-3deg);
+  background: white;
+  font-family: "Inter", "IBM Plex Sans Arabic", sans-serif;
+}
+.stamp-logo.white {
+  color: white;
+  background: transparent;
+  border-color: white;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #d4d6e6; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #b9bcd2; }
