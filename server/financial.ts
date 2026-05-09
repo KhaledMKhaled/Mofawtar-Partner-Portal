@@ -461,8 +461,8 @@ export async function runFinancialHousekeep(): Promise<{ flipped: number; claims
        SET status = 'eligible_for_payout', updated_at = NOW()
       FROM partner_commissions pc
      WHERE sc.request_id = pc.request_id
-       AND sc.status = 'pending'
-       AND pc.status = 'settled'
+       AND sc.status = 'new'
+       AND pc.status = 'settled_successfully'
     RETURNING sc.id`);
   const advancedSales = (eligibleSales as unknown as { rows?: Array<{ id: number }> }).rows?.length ?? 0;
 

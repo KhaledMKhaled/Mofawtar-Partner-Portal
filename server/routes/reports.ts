@@ -188,6 +188,13 @@ function readFilters(req: import("express").Request, cu: ReturnType<typeof getUs
   };
 }
 
+// NOTE: /dashboard/kpis is registered BEFORE /:key so the literal segment
+// "dashboard" is not captured by the dynamic route.
+reportsRouter.get("/dashboard/kpis", async (req, res) => {
+  if (!getUser(req)) return res.status(401).json({ error: "unauthorized" });
+  return dashboardKpisHandler(req, res);
+});
+
 reportsRouter.get("/:key", requirePerm("reports:view"), async (req, res) => {
   const key = req.params.key as ReportKey;
   if (!REPORTS.includes(key)) return res.status(404).json({ error: "unknown_report" });
@@ -242,9 +249,8 @@ reportsRouter.get("/:key/export.pdf", requirePerm("reports:export"), async (req,
 // Aggregate KPIs for the dashboard, role-tailored.
 // Dashboard KPIs are visible to every authenticated user; the response is
 // role-tailored server-side so each role only sees cards they have permission
-// to act on.
-reportsRouter.get("/dashboard/kpis", async (req, res) => {
-  if (!getUser(req)) return res.status(401).json({ error: "unauthorized" });
+// to act on. Registered above with /dashboard/kpis literal precedence.
+async function dashboardKpisHandler(req: import("express").Request, res: import("express").Response) {
   const cu = getUser(req)!;
   const scoped = partnerScoped(cu);
   const partnerFilter = scoped ? sql`partner_id = ${cu.partnerId}` : sql`TRUE`;
@@ -318,4 +324,4 @@ reportsRouter.get("/dashboard/kpis", async (req, res) => {
   }
 
   res.json({ cards });
-});
+}

@@ -53,7 +53,7 @@ const importInput = z.object({
 // error taxonomy before they commit.
 excelImportRouter.post("/validate", requirePerm("excel_import:import"), async (req, res) => {
   const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin") return res.status(403).json({ error: "forbidden" });
+  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
   const parsed = importInput.safeParse({ ...req.body, dryRun: true });
   if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
   const { ok, failures } = await validateRows(parsed.data.entity, parsed.data.rows);
@@ -101,7 +101,7 @@ async function validateRows(entity: Entity, rows: Array<Record<string, unknown>>
 
 excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res) => {
   const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin") return res.status(403).json({ error: "forbidden" });
+  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
   const parsed = importInput.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
 
