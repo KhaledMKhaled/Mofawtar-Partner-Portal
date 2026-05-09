@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
 import { Field } from "../components/Field";
 import { useCurrentUser, can } from "../hooks/useAuth";
+import i18n from "../i18n";
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -21,10 +22,20 @@ export function SettingsPage() {
 
   const save = useMutation({
     mutationFn: (data: SettingsMap) => api("/api/settings", { method: "PUT", json: data }),
-    onSuccess: () => {
+    onSuccess: (_res, data) => {
       setSaved(true);
       qc.invalidateQueries({ queryKey: ["settings"] });
       setTimeout(() => setSaved(false), 2500);
+      // Apply language change immediately and persist it in localStorage.
+      const lang = String(data.language ?? "ar");
+      if (lang !== i18n.language) {
+        i18n.changeLanguage(lang);
+        localStorage.setItem("i18nextLng", lang);
+      }
+      // Apply direction immediately.
+      const dir = String(data.direction ?? (lang === "en" ? "ltr" : "rtl"));
+      document.documentElement.dir = dir;
+      document.documentElement.lang = lang;
     },
   });
 
