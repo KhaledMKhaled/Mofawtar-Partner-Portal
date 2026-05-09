@@ -292,13 +292,16 @@ async function notifySalesUser(salesUserId: number, type: NotificationType, opts
 }
 
 // -------- Order payment transitions --------
-export async function transitionOrderPayment(opts: {
-  id: number;
-  toStatus: OrderPaymentStatus;
-  userId: number;
-  reason?: string | null;
-}): Promise<{ ok: true } | { ok: false; error: string; allowed?: OrderPaymentStatus[] }> {
-  const [op] = await db.select().from(orderPayments).where(eq(orderPayments.id, opts.id));
+export async function transitionOrderPayment(
+  opts: {
+    id: number;
+    toStatus: OrderPaymentStatus;
+    userId: number;
+    reason?: string | null;
+  },
+  executor: DbExecutor = db,
+): Promise<{ ok: true } | { ok: false; error: string; allowed?: OrderPaymentStatus[] }> {
+  const [op] = await executor.select().from(orderPayments).where(eq(orderPayments.id, opts.id));
   if (!op) return { ok: false, error: "not_found" };
   const from = op.status as OrderPaymentStatus;
   if (!isAllowedOrderPaymentTransition(from, opts.toStatus)) {
@@ -307,8 +310,8 @@ export async function transitionOrderPayment(opts: {
   const update: Partial<typeof orderPayments.$inferInsert> = { status: opts.toStatus, updatedAt: new Date() };
   if (opts.toStatus === "received_by_company") update.receivedAt = new Date();
   if (opts.toStatus === "settled") update.settledAt = new Date();
-  await db.update(orderPayments).set(update).where(eq(orderPayments.id, opts.id));
-  await db.insert(orderPaymentStatusHistory).values({
+  await executor.update(orderPayments).set(update).where(eq(orderPayments.id, opts.id));
+  await executor.insert(orderPaymentStatusHistory).values({
     orderPaymentId: opts.id,
     fromStatus: from,
     toStatus: opts.toStatus,
@@ -348,15 +351,18 @@ export async function transitionOrderPayment(opts: {
 }
 
 // -------- Partner commission transitions --------
-export async function transitionPartnerCommission(opts: {
-  id: number; toStatus: PartnerCommissionStatus; userId: number | null; reason?: string | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [pc] = await db.select().from(partnerCommissions).where(eq(partnerCommissions.id, opts.id));
+export async function transitionPartnerCommission(
+  opts: {
+    id: number; toStatus: PartnerCommissionStatus; userId: number | null; reason?: string | null;
+  },
+  executor: DbExecutor = db,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [pc] = await executor.select().from(partnerCommissions).where(eq(partnerCommissions.id, opts.id));
   if (!pc) return { ok: false, error: "not_found" };
   const from = pc.status as PartnerCommissionStatus;
   if (!isAllowedPartnerCommissionTransition(from, opts.toStatus)) return { ok: false, error: "invalid_transition" };
-  await db.update(partnerCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(partnerCommissions.id, opts.id));
-  await db.insert(partnerCommissionStatusHistory).values({
+  await executor.update(partnerCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(partnerCommissions.id, opts.id));
+  await executor.insert(partnerCommissionStatusHistory).values({
     partnerCommissionId: opts.id, fromStatus: from, toStatus: opts.toStatus, reason: opts.reason ?? null, changedByUserId: opts.userId,
   });
   await audit({
@@ -375,15 +381,18 @@ export async function transitionPartnerCommission(opts: {
   return { ok: true };
 }
 
-export async function transitionSalesCommission(opts: {
-  id: number; toStatus: SalesCommissionStatus; userId: number; reason?: string | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [sc] = await db.select().from(salesCommissions).where(eq(salesCommissions.id, opts.id));
+export async function transitionSalesCommission(
+  opts: {
+    id: number; toStatus: SalesCommissionStatus; userId: number; reason?: string | null;
+  },
+  executor: DbExecutor = db,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [sc] = await executor.select().from(salesCommissions).where(eq(salesCommissions.id, opts.id));
   if (!sc) return { ok: false, error: "not_found" };
   const from = sc.status as SalesCommissionStatus;
   if (!isAllowedSalesCommissionTransition(from, opts.toStatus)) return { ok: false, error: "invalid_transition" };
-  await db.update(salesCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(salesCommissions.id, opts.id));
-  await db.insert(salesCommissionStatusHistory).values({
+  await executor.update(salesCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(salesCommissions.id, opts.id));
+  await executor.insert(salesCommissionStatusHistory).values({
     salesCommissionId: opts.id, fromStatus: from, toStatus: opts.toStatus, reason: opts.reason ?? null, changedByUserId: opts.userId,
   });
   await audit({
@@ -486,37 +495,44 @@ export async function createClaim(opts: {
   notes?: string;
 }): Promise<{ id: number; claimNumber: string }> {
   const partnerId = opts.partnerId;
-  const items = await db
-    .select()
-    .from(partnerCommissions)
-    .where(
-      and(
-        eq(partnerCommissions.partnerId, partnerId),
-        eq(partnerCommissions.status, "eligible_for_claim"),
-        inArray(partnerCommissions.id, opts.partnerCommissionIds),
-      )
-    );
-  if (items.length === 0) throw new Error("no_eligible_items");
-  const total = items.reduce((s, i) => s + Number(i.amount), 0);
-  const claimNumber = `CLM-${Date.now()}-${partnerId}`;
-  const [claim] = await db
-    .insert(claims)
-    .values({
-      claimNumber,
-      partnerId,
-      status: "draft",
-      autoGenerated: !!opts.autoGenerated,
-      totalAmount: String(total),
-      notes: opts.notes,
-      createdByUserId: opts.userId || null,
-      submittedAt: new Date(),
-    })
-    .returning();
-  for (const it of items) {
-    await db.insert(claimItems).values({ claimId: claim.id, partnerCommissionId: it.id, amount: it.amount });
-    await transitionPartnerCommission({ id: it.id, toStatus: "in_claim", userId: opts.userId, reason: `attached to ${claimNumber}` });
-    await db.update(partnerCommissions).set({ claimId: claim.id }).where(eq(partnerCommissions.id, it.id));
-  }
+  const { claim, total, claimNumber } = await db.transaction(async (tx) => {
+    const items = await tx
+      .select()
+      .from(partnerCommissions)
+      .where(
+        and(
+          eq(partnerCommissions.partnerId, partnerId),
+          eq(partnerCommissions.status, "eligible_for_claim"),
+          inArray(partnerCommissions.id, opts.partnerCommissionIds),
+        )
+      );
+    if (items.length === 0) throw new Error("no_eligible_items");
+    const total = items.reduce((s, i) => s + Number(i.amount), 0);
+    const claimNumber = `CLM-${Date.now()}-${partnerId}`;
+    const [claim] = await tx
+      .insert(claims)
+      .values({
+        claimNumber,
+        partnerId,
+        status: "draft",
+        autoGenerated: !!opts.autoGenerated,
+        totalAmount: String(total),
+        notes: opts.notes,
+        createdByUserId: opts.userId || null,
+        submittedAt: new Date(),
+      })
+      .returning();
+    for (const it of items) {
+      await tx.insert(claimItems).values({ claimId: claim.id, partnerCommissionId: it.id, amount: it.amount });
+      const r = await transitionPartnerCommission(
+        { id: it.id, toStatus: "in_claim", userId: opts.userId, reason: `attached to ${claimNumber}` },
+        tx,
+      );
+      if (!r.ok) throw new Error(`transition_failed:${it.id}:${r.error}`);
+      await tx.update(partnerCommissions).set({ claimId: claim.id }).where(eq(partnerCommissions.id, it.id));
+    }
+    return { claim, total, claimNumber };
+  });
   await audit({
     userId: opts.userId || null,
     action: "claim.created",
@@ -534,17 +550,24 @@ export async function createClaim(opts: {
 }
 
 export async function approveClaim(claimId: number, userId: number): Promise<void> {
-  const [c] = await db.select().from(claims).where(eq(claims.id, claimId));
-  if (!c) throw new Error("not_found");
-  if (c.status !== "draft") throw new Error("invalid_state");
-  await db
-    .update(claims)
-    .set({ status: "approved", approvedAt: new Date(), approvedByUserId: userId, updatedAt: new Date() })
-    .where(eq(claims.id, claimId));
-  const items = await db.select().from(claimItems).where(eq(claimItems.claimId, claimId));
-  for (const it of items) {
-    await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "claim_approved", userId, reason: "claim_approved" });
-  }
+  const c = await db.transaction(async (tx) => {
+    const [c] = await tx.select().from(claims).where(eq(claims.id, claimId));
+    if (!c) throw new Error("not_found");
+    if (c.status !== "draft") throw new Error("invalid_state");
+    await tx
+      .update(claims)
+      .set({ status: "approved", approvedAt: new Date(), approvedByUserId: userId, updatedAt: new Date() })
+      .where(eq(claims.id, claimId));
+    const items = await tx.select().from(claimItems).where(eq(claimItems.claimId, claimId));
+    for (const it of items) {
+      const r = await transitionPartnerCommission(
+        { id: it.partnerCommissionId, toStatus: "claim_approved", userId, reason: "claim_approved" },
+        tx,
+      );
+      if (!r.ok) throw new Error(`transition_failed:${it.partnerCommissionId}:${r.error}`);
+    }
+    return c;
+  });
   await audit({ userId, action: "claim.approved", entityType: "claim", entityId: claimId, partnerId: c.partnerId });
   await notifyPartnerAccountants(c.partnerId, "claim.approved", {
     titleEn: `Claim ${c.claimNumber} approved`,
@@ -554,27 +577,30 @@ export async function approveClaim(claimId: number, userId: number): Promise<voi
 }
 
 export async function rejectClaim(claimId: number, userId: number, reason: string): Promise<void> {
-  const [c] = await db.select().from(claims).where(eq(claims.id, claimId));
-  if (!c) throw new Error("not_found");
-  if (c.status !== "draft") throw new Error("invalid_state");
-  await db
-    .update(claims)
-    .set({ status: "rejected", rejectedAt: new Date(), rejectionReason: reason, updatedAt: new Date() })
-    .where(eq(claims.id, claimId));
-  const items = await db.select().from(claimItems).where(eq(claimItems.claimId, claimId));
-  for (const it of items) {
-    // Move back to eligible_for_claim
-    await db.update(partnerCommissions)
-      .set({ status: "eligible_for_claim", claimId: null, updatedAt: new Date() })
-      .where(eq(partnerCommissions.id, it.partnerCommissionId));
-    await db.insert(partnerCommissionStatusHistory).values({
-      partnerCommissionId: it.partnerCommissionId,
-      fromStatus: "in_claim",
-      toStatus: "eligible_for_claim",
-      reason: `claim_rejected: ${reason}`,
-      changedByUserId: userId,
-    });
-  }
+  const c = await db.transaction(async (tx) => {
+    const [c] = await tx.select().from(claims).where(eq(claims.id, claimId));
+    if (!c) throw new Error("not_found");
+    if (c.status !== "draft") throw new Error("invalid_state");
+    await tx
+      .update(claims)
+      .set({ status: "rejected", rejectedAt: new Date(), rejectionReason: reason, updatedAt: new Date() })
+      .where(eq(claims.id, claimId));
+    const items = await tx.select().from(claimItems).where(eq(claimItems.claimId, claimId));
+    for (const it of items) {
+      // Move back to eligible_for_claim
+      await tx.update(partnerCommissions)
+        .set({ status: "eligible_for_claim", claimId: null, updatedAt: new Date() })
+        .where(eq(partnerCommissions.id, it.partnerCommissionId));
+      await tx.insert(partnerCommissionStatusHistory).values({
+        partnerCommissionId: it.partnerCommissionId,
+        fromStatus: "in_claim",
+        toStatus: "eligible_for_claim",
+        reason: `claim_rejected: ${reason}`,
+        changedByUserId: userId,
+      });
+    }
+    return c;
+  });
   await audit({ userId, action: "claim.rejected", entityType: "claim", entityId: claimId, partnerId: c.partnerId, note: reason });
   await notifyPartnerAccountants(c.partnerId, "claim.rejected", {
     titleEn: `Claim ${c.claimNumber} rejected`,
@@ -592,57 +618,78 @@ export async function createPayoutBatch(opts: {
   userId: number;
   notes?: string;
 }): Promise<{ id: number; batchNumber: string }> {
-  const items = await db
-    .select()
-    .from(salesCommissions)
-    .where(
-      and(
-        eq(salesCommissions.partnerId, opts.partnerId),
-        eq(salesCommissions.status, "eligible_for_payout"),
-        inArray(salesCommissions.id, opts.salesCommissionIds),
-      )
-    );
-  if (items.length === 0) throw new Error("no_eligible_items");
-  const total = items.reduce((s, i) => s + Number(i.amount), 0);
-  const batchNumber = `PB-${Date.now()}-${opts.partnerId}`;
-  const [batch] = await db
-    .insert(payoutBatches)
-    .values({
-      batchNumber, partnerId: opts.partnerId, cycle: opts.cycle, status: "draft",
-      totalAmount: String(total), notes: opts.notes,
-      createdByUserId: opts.userId, submittedAt: new Date(),
-    })
-    .returning();
-  for (const it of items) {
-    await db.insert(payoutBatchItems).values({ payoutBatchId: batch.id, salesCommissionId: it.id, amount: it.amount });
-    await transitionSalesCommission({ id: it.id, toStatus: "in_payout_batch", userId: opts.userId, reason: `attached to ${batchNumber}` });
-    await db.update(salesCommissions).set({ payoutBatchId: batch.id }).where(eq(salesCommissions.id, it.id));
-  }
+  const { batch, batchNumber } = await db.transaction(async (tx) => {
+    const items = await tx
+      .select()
+      .from(salesCommissions)
+      .where(
+        and(
+          eq(salesCommissions.partnerId, opts.partnerId),
+          eq(salesCommissions.status, "eligible_for_payout"),
+          inArray(salesCommissions.id, opts.salesCommissionIds),
+        )
+      );
+    if (items.length === 0) throw new Error("no_eligible_items");
+    const total = items.reduce((s, i) => s + Number(i.amount), 0);
+    const batchNumber = `PB-${Date.now()}-${opts.partnerId}`;
+    const [batch] = await tx
+      .insert(payoutBatches)
+      .values({
+        batchNumber, partnerId: opts.partnerId, cycle: opts.cycle, status: "draft",
+        totalAmount: String(total), notes: opts.notes,
+        createdByUserId: opts.userId, submittedAt: new Date(),
+      })
+      .returning();
+    for (const it of items) {
+      await tx.insert(payoutBatchItems).values({ payoutBatchId: batch.id, salesCommissionId: it.id, amount: it.amount });
+      const r = await transitionSalesCommission(
+        { id: it.id, toStatus: "in_payout_batch", userId: opts.userId, reason: `attached to ${batchNumber}` },
+        tx,
+      );
+      if (!r.ok) throw new Error(`transition_failed:${it.id}:${r.error}`);
+      await tx.update(salesCommissions).set({ payoutBatchId: batch.id }).where(eq(salesCommissions.id, it.id));
+    }
+    return { batch, batchNumber };
+  });
   await audit({ userId: opts.userId, action: "payout_batch.created", entityType: "payout_batch", entityId: batch.id, partnerId: opts.partnerId, newValue: batch });
   return { id: batch.id, batchNumber };
 }
 
 export async function approvePayoutBatch(batchId: number, userId: number): Promise<void> {
-  const [b] = await db.select().from(payoutBatches).where(eq(payoutBatches.id, batchId));
-  if (!b) throw new Error("not_found");
-  if (b.status !== "draft") throw new Error("invalid_state");
-  await db.update(payoutBatches).set({ status: "approved", approvedAt: new Date(), approvedByUserId: userId, updatedAt: new Date() }).where(eq(payoutBatches.id, batchId));
-  const items = await db.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
-  for (const it of items) {
-    await transitionSalesCommission({ id: it.salesCommissionId, toStatus: "approved_by_company", userId, reason: "batch_approved" });
-  }
+  const b = await db.transaction(async (tx) => {
+    const [b] = await tx.select().from(payoutBatches).where(eq(payoutBatches.id, batchId));
+    if (!b) throw new Error("not_found");
+    if (b.status !== "draft") throw new Error("invalid_state");
+    await tx.update(payoutBatches).set({ status: "approved", approvedAt: new Date(), approvedByUserId: userId, updatedAt: new Date() }).where(eq(payoutBatches.id, batchId));
+    const items = await tx.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
+    for (const it of items) {
+      const r = await transitionSalesCommission(
+        { id: it.salesCommissionId, toStatus: "approved_by_company", userId, reason: "batch_approved" },
+        tx,
+      );
+      if (!r.ok) throw new Error(`transition_failed:${it.salesCommissionId}:${r.error}`);
+    }
+    return b;
+  });
   await audit({ userId, action: "payout_batch.approved", entityType: "payout_batch", entityId: batchId, partnerId: b.partnerId });
 }
 
 export async function payPayoutBatch(batchId: number, userId: number): Promise<void> {
-  const [b] = await db.select().from(payoutBatches).where(eq(payoutBatches.id, batchId));
-  if (!b) throw new Error("not_found");
-  if (b.status !== "approved") throw new Error("invalid_state");
-  await db.update(payoutBatches).set({ status: "paid", paidAt: new Date(), updatedAt: new Date() }).where(eq(payoutBatches.id, batchId));
-  const items = await db.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
-  for (const it of items) {
-    await transitionSalesCommission({ id: it.salesCommissionId, toStatus: "paid", userId, reason: "batch_paid" });
-  }
+  const b = await db.transaction(async (tx) => {
+    const [b] = await tx.select().from(payoutBatches).where(eq(payoutBatches.id, batchId));
+    if (!b) throw new Error("not_found");
+    if (b.status !== "approved") throw new Error("invalid_state");
+    await tx.update(payoutBatches).set({ status: "paid", paidAt: new Date(), updatedAt: new Date() }).where(eq(payoutBatches.id, batchId));
+    const items = await tx.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
+    for (const it of items) {
+      const r = await transitionSalesCommission(
+        { id: it.salesCommissionId, toStatus: "paid", userId, reason: "batch_paid" },
+        tx,
+      );
+      if (!r.ok) throw new Error(`transition_failed:${it.salesCommissionId}:${r.error}`);
+    }
+    return b;
+  });
   await audit({ userId, action: "payout_batch.paid", entityType: "payout_batch", entityId: batchId, partnerId: b.partnerId });
 }
 
@@ -653,98 +700,116 @@ export async function createSettlement(opts: {
   userId: number;
   notes?: string;
 }): Promise<{ id: number; settlementNumber: string; finalAmount: number; direction: string }> {
-  // Sum of unsettled order_payments received_by_company for this partner.
-  const ops = await db
-    .select()
-    .from(orderPayments)
-    .where(
-      and(
-        eq(orderPayments.partnerId, opts.partnerId),
-        eq(orderPayments.status, "received_by_company"),
-      )
-    );
-  const netDue = ops.reduce((s, o) => s + Number(o.netDueToCompany), 0);
-
-  // Sum of approved partner commissions to be paid out
-  let partnerTotal = 0;
-  const claim = opts.claimId
-    ? (await db.select().from(claims).where(eq(claims.id, opts.claimId)))[0]
-    : null;
-  if (claim) {
-    if (claim.status !== "approved") throw new Error("claim_not_approved");
-    partnerTotal = Number(claim.totalAmount);
-  } else {
-    const approved = await db
+  const { settlement, settlementNumber, finalAmount, direction, claim } = await db.transaction(async (tx) => {
+    // Sum of unsettled order_payments received_by_company for this partner.
+    const ops = await tx
       .select()
-      .from(partnerCommissions)
+      .from(orderPayments)
       .where(
         and(
-          eq(partnerCommissions.partnerId, opts.partnerId),
-          eq(partnerCommissions.status, "claim_approved"),
+          eq(orderPayments.partnerId, opts.partnerId),
+          eq(orderPayments.status, "received_by_company"),
         )
       );
-    partnerTotal = approved.reduce((s, p) => s + Number(p.amount), 0);
-  }
+    const netDue = ops.reduce((s, o) => s + Number(o.netDueToCompany), 0);
 
-  const finalAmount = netDue - partnerTotal;
-  const direction = finalAmount === 0
-    ? "balanced"
-    : finalAmount > 0
-      ? "partner_to_company"
-      : "company_to_partner";
-  const settlementNumber = `STL-${Date.now()}-${opts.partnerId}`;
-  const [settlement] = await db
-    .insert(settlements)
-    .values({
-      settlementNumber, partnerId: opts.partnerId, claimId: opts.claimId,
-      netDueToCompany: String(netDue),
-      partnerCommissionTotal: String(partnerTotal),
-      finalAmount: String(Math.abs(finalAmount)),
-      direction,
-      notes: opts.notes,
-      createdByUserId: opts.userId,
-      completedAt: new Date(),
-    })
-    .returning();
-
-  // Mark order_payments as settled & link
-  for (const o of ops) {
-    await transitionOrderPayment({ id: o.id, toStatus: "settled", userId: opts.userId, reason: `settlement ${settlementNumber}` });
-    await db.update(orderPayments).set({ settlementId: settlement.id }).where(eq(orderPayments.id, o.id));
-  }
-
-  // Move partner commissions to ready_for_settlement → settled_successfully.
-  // When the settlement is bound to a specific claim, only that claim's items
-  // are touched. When no claim is provided (e.g., direct settlement after
-  // claim approval), all of this partner's `claim_approved` commissions are
-  // moved through the same lifecycle so the claim/settlement linkage is
-  // never left dangling.
-  const itemsToSettle = claim
-    ? await db.select({ partnerCommissionId: claimItems.partnerCommissionId }).from(claimItems).where(eq(claimItems.claimId, claim.id))
-    : (await db.select({ partnerCommissionId: partnerCommissions.id })
+    // Sum of approved partner commissions to be paid out
+    let partnerTotal = 0;
+    const claim = opts.claimId
+      ? (await tx.select().from(claims).where(eq(claims.id, opts.claimId)))[0]
+      : null;
+    if (claim) {
+      if (claim.status !== "approved") throw new Error("claim_not_approved");
+      partnerTotal = Number(claim.totalAmount);
+    } else {
+      const approved = await tx
+        .select()
         .from(partnerCommissions)
-        .where(and(eq(partnerCommissions.partnerId, opts.partnerId), eq(partnerCommissions.status, "claim_approved")))
+        .where(
+          and(
+            eq(partnerCommissions.partnerId, opts.partnerId),
+            eq(partnerCommissions.status, "claim_approved"),
+          )
+        );
+      partnerTotal = approved.reduce((s, p) => s + Number(p.amount), 0);
+    }
+
+    const finalAmount = netDue - partnerTotal;
+    const direction = finalAmount === 0
+      ? "balanced"
+      : finalAmount > 0
+        ? "partner_to_company"
+        : "company_to_partner";
+    const settlementNumber = `STL-${Date.now()}-${opts.partnerId}`;
+    const [settlement] = await tx
+      .insert(settlements)
+      .values({
+        settlementNumber, partnerId: opts.partnerId, claimId: opts.claimId,
+        netDueToCompany: String(netDue),
+        partnerCommissionTotal: String(partnerTotal),
+        finalAmount: String(Math.abs(finalAmount)),
+        direction,
+        notes: opts.notes,
+        createdByUserId: opts.userId,
+        completedAt: new Date(),
+      })
+      .returning();
+
+    // Mark order_payments as settled & link
+    for (const o of ops) {
+      const r = await transitionOrderPayment(
+        { id: o.id, toStatus: "settled", userId: opts.userId, reason: `settlement ${settlementNumber}` },
+        tx,
       );
-  for (const it of itemsToSettle) {
-    await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber });
-    await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber });
-    await db.update(partnerCommissions).set({ settlementId: settlement.id }).where(eq(partnerCommissions.id, it.partnerCommissionId));
-  }
+      if (!r.ok) throw new Error(`transition_failed:order_payment:${o.id}:${r.error}`);
+      await tx.update(orderPayments).set({ settlementId: settlement.id }).where(eq(orderPayments.id, o.id));
+    }
+
+    // Move partner commissions to ready_for_settlement → settled_successfully.
+    // When the settlement is bound to a specific claim, only that claim's items
+    // are touched. When no claim is provided (e.g., direct settlement after
+    // claim approval), all of this partner's `claim_approved` commissions are
+    // moved through the same lifecycle so the claim/settlement linkage is
+    // never left dangling.
+    const itemsToSettle = claim
+      ? await tx.select({ partnerCommissionId: claimItems.partnerCommissionId }).from(claimItems).where(eq(claimItems.claimId, claim.id))
+      : (await tx.select({ partnerCommissionId: partnerCommissions.id })
+          .from(partnerCommissions)
+          .where(and(eq(partnerCommissions.partnerId, opts.partnerId), eq(partnerCommissions.status, "claim_approved")))
+        );
+    for (const it of itemsToSettle) {
+      const r1 = await transitionPartnerCommission(
+        { id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber },
+        tx,
+      );
+      if (!r1.ok) throw new Error(`transition_failed:partner_commission:${it.partnerCommissionId}:${r1.error}`);
+      const r2 = await transitionPartnerCommission(
+        { id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber },
+        tx,
+      );
+      if (!r2.ok) throw new Error(`transition_failed:partner_commission:${it.partnerCommissionId}:${r2.error}`);
+      await tx.update(partnerCommissions).set({ settlementId: settlement.id }).where(eq(partnerCommissions.id, it.partnerCommissionId));
+    }
+    if (claim) {
+      await tx.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, claim.id));
+    } else {
+      // Mark all of this partner's open approved claims as settled and link
+      // them to this settlement, so the claim → settlement transition is
+      // consistent regardless of which UI path opened the settlement.
+      const openClaims = await tx.select().from(claims).where(and(eq(claims.partnerId, opts.partnerId), eq(claims.status, "approved")));
+      for (const c of openClaims) {
+        await tx.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, c.id));
+      }
+    }
+    return { settlement, settlementNumber, finalAmount, direction, claim };
+  });
+
   if (claim) {
-    await db.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, claim.id));
     await notifyPartnerAccountants(opts.partnerId, "claim.settled", {
       titleEn: `Claim ${claim.claimNumber} settled`,
       titleAr: `تمت تسوية المطالبة ${claim.claimNumber}`,
       entityType: "claim", entityId: claim.id, linkPath: `/claims/${claim.id}`,
     });
-  } else {
-    // Mark all of this partner's open approved claims as settled and link
-    // them to this settlement, so the claim → settlement transition is
-    // consistent regardless of which UI path opened the settlement.
-    const openClaims = await db.select().from(claims).where(and(eq(claims.partnerId, opts.partnerId), eq(claims.status, "approved")));
-    for (const c of openClaims) {
-      await db.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, c.id));
-    }
   }
 
   await audit({ userId: opts.userId, action: "settlement.completed", entityType: "settlement", entityId: settlement.id, partnerId: opts.partnerId, newValue: settlement });
