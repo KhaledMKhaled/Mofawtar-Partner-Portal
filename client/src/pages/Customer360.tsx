@@ -187,25 +187,46 @@ export function Customer360Page() {
           <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("requests.timeline")}</h3>
           <ul className="space-y-3 text-sm">
             {events.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
-            {events.map((e) => (
-              <li key={`${e.kind}-${e.id}`} className="border-s-2 border-violet-200 ps-3">
-                <div className="text-xs text-muted">{new Date(e.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
-                {e.kind === "status" ? (
-                  <div>
-                    <span className="font-medium">SR #{e.requestId}</span>{" "}
-                    {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
-                    {t(`requests.statuses.${e.toStatus}`)}
-                  </div>
-                ) : (
-                  <div>
-                    <span className="font-medium">SR #{e.requestId}</span>{" "}
-                    <span className="pill-violet">{t("requests.reassigned")}</span>
-                  </div>
-                )}
-                {e.userName && <div className="text-xs text-muted">{e.userName}</div>}
-                {e.reason && <div className="text-xs italic">{e.reason}</div>}
-              </li>
-            ))}
+            {events.map((e) => {
+              const req = requests.find((r) => r.id === e.requestId);
+              const isCreation = e.kind === "status" && !e.fromStatus && e.toStatus === "draft_sr";
+              const onBehalf =
+                isCreation && req?.salesName && e.userName && e.userName !== req.salesName
+                  ? req.salesName
+                  : null;
+              return (
+                <li key={`${e.kind}-${e.id}`} className="border-s-2 border-violet-200 ps-3">
+                  <div className="text-xs text-muted">{new Date(e.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
+                  {e.kind === "status" ? (
+                    <div>
+                      <span className="font-medium">SR #{e.requestId}</span>{" "}
+                      {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
+                      {t(`requests.statuses.${e.toStatus}`)}
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="font-medium">SR #{e.requestId}</span>{" "}
+                      <span className="pill-violet">{t("requests.reassigned")}</span>
+                    </div>
+                  )}
+                  {e.userName && (
+                    <div className="text-xs text-muted">
+                      {e.userName}
+                      {onBehalf && (
+                        <span>
+                          {" · "}
+                          {t("requests.onBehalfOf")} <span className="font-semibold text-ink">{onBehalf}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {isCreation && req?.salesName && e.userName === req.salesName && (
+                    <div className="text-xs text-muted">{t("requests.assignedTo")}: <span className="text-ink">{req.salesName}</span></div>
+                  )}
+                  {e.reason && <div className="text-xs italic">{e.reason}</div>}
+                </li>
+              );
+            })}
           </ul>
         </div>
         <div className="stamp-card p-5">
