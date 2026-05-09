@@ -13,8 +13,15 @@ interface Customer {
   id: number;
   taxCardNumber: string;
   name: string;
+  nameOnTaxCard: string | null;
+  commercialRegistry: string | null;
+  nationalId: string | null;
   contactPerson: string | null;
   contactPhone: string | null;
+  primaryPhone: string | null;
+  primaryPhoneWhatsapp: boolean;
+  altPhone: string | null;
+  altPhoneWhatsapp: boolean;
   email: string | null;
   address: string | null;
   taxOffice: string | null;
@@ -47,8 +54,15 @@ const blankCustomer: Customer = {
   id: 0,
   taxCardNumber: "",
   name: "",
+  nameOnTaxCard: "",
+  commercialRegistry: "",
+  nationalId: "",
   contactPerson: "",
   contactPhone: "",
+  primaryPhone: "",
+  primaryPhoneWhatsapp: false,
+  altPhone: "",
+  altPhoneWhatsapp: false,
   email: "",
   address: "",
   taxOffice: "",
@@ -136,11 +150,26 @@ export function RequestWizard({
     enabled: open && isCompany,
   });
 
+  // For company users the sales list depends on the partner they pick.
+  const salesPartnerId = isCompany ? wizardPartnerId : (user?.partnerId ?? null);
   const teamMembers = useQuery({
-    queryKey: ["users", "team-members", user?.id],
-    queryFn: () => api<{ id: number; name: string }[]>("/api/users/sales-assignable"),
-    enabled: open && (user?.roleKey === "team_leader" || user?.roleKey === "partner_admin"),
+    queryKey: ["users", "sales-assignable", salesPartnerId],
+    queryFn: () =>
+      api<{ id: number; name: string }[]>(
+        `/api/users/sales-assignable${isCompany && salesPartnerId ? `?partnerId=${salesPartnerId}` : ""}`,
+      ),
+    enabled:
+      open &&
+      (user?.roleKey === "team_leader" ||
+        user?.roleKey === "partner_admin" ||
+        (isCompany && !!salesPartnerId)),
   });
+
+  // Reset sales selection when company user changes the partner.
+  useEffect(() => {
+    if (isCompany) setSalesUserId(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardPartnerId]);
 
   const lookupMut = useMutation({
     mutationFn: (taxCard: string) =>
@@ -230,7 +259,12 @@ export function RequestWizard({
           {step === 2 && (
             <button
               className="btn-primary"
-              disabled={!customer.name || (isCompany && !wizardPartnerId) || draftMut.isPending}
+              disabled={
+                !customer.name ||
+                (isCompany && (!wizardPartnerId || !salesUserId)) ||
+                ((user?.roleKey === "team_leader" || user?.roleKey === "partner_admin") && !salesUserId) ||
+                draftMut.isPending
+              }
               onClick={async () => {
                 setError(null);
                 try {
@@ -317,29 +351,50 @@ export function RequestWizard({
             </div>
           )}
           <div className="form-row">
-            <Field label={t("wizard.taxCard")}>
-              <input dir="ltr" className="input font-mono" value={tax} disabled />
-            </Field>
             <Field label={t("customers.businessName")} required>
               <input className="input" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
             </Field>
-            <Field label={t("customers.contactPerson")}>
-              <input className="input" value={customer.contactPerson ?? ""} onChange={(e) => setCustomer({ ...customer, contactPerson: e.target.value })} />
+            <Field label={t("wizard.taxCard")} hint={t("wizard.taxCardLocked")}>
+              <input dir="ltr" className="input font-mono bg-magnolia cursor-not-allowed" value={tax} disabled readOnly />
             </Field>
-            <Field label={t("customers.contactPhone")}>
-              <input dir="ltr" className="input" value={customer.contactPhone ?? ""} onChange={(e) => setCustomer({ ...customer, contactPhone: e.target.value })} />
-            </Field>
-            <Field label={t("common.email")}>
-              <input dir="ltr" type="email" className="input" value={customer.email ?? ""} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} />
+            <Field label={t("customers.nameOnTaxCard")}>
+              <input className="input" value={customer.nameOnTaxCard ?? ""} onChange={(e) => setCustomer({ ...customer, nameOnTaxCard: e.target.value })} />
             </Field>
             <Field label={t("customers.taxOffice")}>
               <input className="input" value={customer.taxOffice ?? ""} onChange={(e) => setCustomer({ ...customer, taxOffice: e.target.value })} />
             </Field>
-            <Field label={t("customers.businessActivity")} className="md:col-span-2">
+            <Field label={t("customers.commercialRegistry")}>
+              <input dir="ltr" className="input" value={customer.commercialRegistry ?? ""} onChange={(e) => setCustomer({ ...customer, commercialRegistry: e.target.value })} />
+            </Field>
+            <Field label={t("customers.businessActivity")}>
               <input className="input" value={customer.businessActivity ?? ""} onChange={(e) => setCustomer({ ...customer, businessActivity: e.target.value })} />
+            </Field>
+            <Field label={t("common.email")}>
+              <input dir="ltr" type="email" className="input" value={customer.email ?? ""} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} />
+            </Field>
+            <Field label={t("customers.nationalId")}>
+              <input dir="ltr" className="input" value={customer.nationalId ?? ""} onChange={(e) => setCustomer({ ...customer, nationalId: e.target.value.replace(/\D/g, "").slice(0, 14) })} />
             </Field>
             <Field label={t("common.address")} className="md:col-span-2">
               <input className="input" value={customer.address ?? ""} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
+            </Field>
+            <Field label={t("customers.primaryPhone")}>
+              <PhoneWithWhatsapp
+                value={customer.primaryPhone ?? ""}
+                onChange={(v) => setCustomer({ ...customer, primaryPhone: v })}
+                whatsapp={customer.primaryPhoneWhatsapp}
+                onWhatsappChange={(b) => setCustomer({ ...customer, primaryPhoneWhatsapp: b })}
+                whatsappLabel={t("customers.whatsapp")}
+              />
+            </Field>
+            <Field label={t("customers.altPhone")}>
+              <PhoneWithWhatsapp
+                value={customer.altPhone ?? ""}
+                onChange={(v) => setCustomer({ ...customer, altPhone: v })}
+                whatsapp={customer.altPhoneWhatsapp}
+                onWhatsappChange={(b) => setCustomer({ ...customer, altPhoneWhatsapp: b })}
+                whatsappLabel={t("customers.whatsapp")}
+              />
             </Field>
             {isCompany && (
               <Field label={t("common.partner")} required>
@@ -355,12 +410,23 @@ export function RequestWizard({
                 </select>
               </Field>
             )}
-            {(user?.roleKey === "team_leader" || user?.roleKey === "partner_admin") && (
-              <Field label={t("wizard.assignSales")} required={user?.roleKey === "team_leader"}>
+            {(isCompany || user?.roleKey === "team_leader" || user?.roleKey === "partner_admin") && (
+              <Field
+                label={t("wizard.assignSales")}
+                required
+                hint={
+                  isCompany && !wizardPartnerId
+                    ? t("wizard.selectPartnerFirst")
+                    : teamMembers.data && teamMembers.data.length === 0
+                      ? t("wizard.noSalesForPartner")
+                      : undefined
+                }
+              >
                 <select
                   className="input"
                   value={salesUserId ?? ""}
                   onChange={(e) => setSalesUserId(e.target.value ? Number(e.target.value) : null)}
+                  disabled={isCompany && !wizardPartnerId}
                 >
                   <option value="">{t("wizard.selectSales")}</option>
                   {teamMembers.data?.map((m) => (
@@ -472,6 +538,51 @@ function Stepper({ step }: { step: 1 | 2 | 3 | 4 }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PhoneWithWhatsapp({
+  value,
+  onChange,
+  whatsapp,
+  onWhatsappChange,
+  whatsappLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  whatsapp: boolean;
+  onWhatsappChange: (b: boolean) => void;
+  whatsappLabel: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        dir="ltr"
+        className="input flex-1"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <label className="flex items-center gap-2 text-xs text-muted shrink-0 cursor-pointer select-none">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={whatsapp}
+          onClick={() => onWhatsappChange(!whatsapp)}
+          className={
+            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors " +
+            (whatsapp ? "bg-emerald-500" : "bg-slate-300")
+          }
+        >
+          <span
+            className={
+              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform " +
+              (whatsapp ? "translate-x-5" : "translate-x-0.5")
+            }
+          />
+        </button>
+        <span>{whatsappLabel}</span>
+      </label>
     </div>
   );
 }

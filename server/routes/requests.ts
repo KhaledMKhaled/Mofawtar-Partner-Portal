@@ -216,8 +216,15 @@ requestsRouter.get("/lookup/:tax", requirePerm("requests:view"), async (req, res
 const customerInput = z.object({
   taxCardNumber: z.string().regex(TAX_RE),
   name: z.string().min(2),
+  nameOnTaxCard: z.string().optional().nullable(),
+  commercialRegistry: z.string().optional().nullable(),
+  nationalId: z.string().optional().nullable(),
   contactPerson: z.string().optional().nullable(),
   contactPhone: z.string().optional().nullable(),
+  primaryPhone: z.string().optional().nullable(),
+  primaryPhoneWhatsapp: z.boolean().optional(),
+  altPhone: z.string().optional().nullable(),
+  altPhoneWhatsapp: z.boolean().optional(),
   email: z.string().email().optional().nullable().or(z.literal("")),
   address: z.string().optional().nullable(),
   taxOffice: z.string().optional().nullable(),
@@ -248,27 +255,36 @@ requestsRouter.post("/draft", requirePerm("requests:create"), async (req, res) =
   if (cu.roleKey === "sales") {
     salesUserId = cu.id;
     teamLeaderId = cu.teamLeaderId ?? null;
-  } else if (cu.roleKey === "team_leader") {
+  } else if (
+    cu.roleKey === "team_leader" ||
+    cu.roleKey === "partner_admin" ||
+    cu.roleKey === "company_super_admin" ||
+    cu.roleKey === "company_accountant"
+  ) {
+    // All higher-than-sales roles must explicitly assign the request to a real,
+    // active sales rep belonging to the chosen partner. Server-side guard so
+    // direct API calls cannot route the request to a non-sales / inactive user.
     if (!d.salesUserId) return res.status(400).json({ error: "sales_user_required" });
     const [s] = await db
-      .select({ id: users.id, partnerId: users.partnerId, teamLeaderId: users.teamLeaderId })
+      .select({
+        id: users.id,
+        partnerId: users.partnerId,
+        teamLeaderId: users.teamLeaderId,
+        status: users.status,
+        roleKey: roles.key,
+      })
       .from(users)
+      .innerJoin(roles, eq(roles.id, users.roleId))
       .where(eq(users.id, d.salesUserId));
-    if (!s || s.partnerId !== partnerId || s.teamLeaderId !== cu.id) {
+    if (!s || s.partnerId !== partnerId || s.roleKey !== "sales" || s.status !== "active") {
+      return res.status(403).json({ error: "invalid_sales_user" });
+    }
+    // Team leaders are responsible only for their own direct reports.
+    if (cu.roleKey === "team_leader" && s.teamLeaderId !== cu.id) {
       return res.status(403).json({ error: "invalid_sales_user" });
     }
     salesUserId = s.id;
-    teamLeaderId = cu.id;
-  } else if (cu.roleKey === "partner_admin") {
-    if (d.salesUserId) {
-      const [s] = await db
-        .select({ id: users.id, partnerId: users.partnerId, teamLeaderId: users.teamLeaderId })
-        .from(users)
-        .where(eq(users.id, d.salesUserId));
-      if (!s || s.partnerId !== partnerId) return res.status(400).json({ error: "invalid_sales_user" });
-      salesUserId = s.id;
-      teamLeaderId = s.teamLeaderId;
-    }
+    teamLeaderId = cu.roleKey === "team_leader" ? cu.id : s.teamLeaderId;
   }
 
   // Tax card ownership / duplicate gate
@@ -309,8 +325,15 @@ requestsRouter.post("/draft", requirePerm("requests:create"), async (req, res) =
       .update(customers)
       .set({
         name: d.customer.name,
+        nameOnTaxCard: d.customer.nameOnTaxCard ?? existingCustomer.nameOnTaxCard,
+        commercialRegistry: d.customer.commercialRegistry ?? existingCustomer.commercialRegistry,
+        nationalId: d.customer.nationalId ?? existingCustomer.nationalId,
         contactPerson: d.customer.contactPerson ?? existingCustomer.contactPerson,
         contactPhone: d.customer.contactPhone ?? existingCustomer.contactPhone,
+        primaryPhone: d.customer.primaryPhone ?? existingCustomer.primaryPhone,
+        primaryPhoneWhatsapp: d.customer.primaryPhoneWhatsapp ?? existingCustomer.primaryPhoneWhatsapp,
+        altPhone: d.customer.altPhone ?? existingCustomer.altPhone,
+        altPhoneWhatsapp: d.customer.altPhoneWhatsapp ?? existingCustomer.altPhoneWhatsapp,
         email: d.customer.email || existingCustomer.email,
         address: d.customer.address ?? existingCustomer.address,
         taxOffice: d.customer.taxOffice ?? existingCustomer.taxOffice,
@@ -328,8 +351,15 @@ requestsRouter.post("/draft", requirePerm("requests:create"), async (req, res) =
         .values({
           taxCardNumber: d.customer.taxCardNumber,
           name: d.customer.name,
+          nameOnTaxCard: d.customer.nameOnTaxCard ?? null,
+          commercialRegistry: d.customer.commercialRegistry ?? null,
+          nationalId: d.customer.nationalId ?? null,
           contactPerson: d.customer.contactPerson ?? null,
           contactPhone: d.customer.contactPhone ?? null,
+          primaryPhone: d.customer.primaryPhone ?? null,
+          primaryPhoneWhatsapp: d.customer.primaryPhoneWhatsapp ?? false,
+          altPhone: d.customer.altPhone ?? null,
+          altPhoneWhatsapp: d.customer.altPhoneWhatsapp ?? false,
           email: d.customer.email || null,
           address: d.customer.address ?? null,
           taxOffice: d.customer.taxOffice ?? null,

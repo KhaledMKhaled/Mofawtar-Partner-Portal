@@ -10,8 +10,15 @@ interface Customer360 {
     id: number;
     taxCardNumber: string;
     name: string;
+    nameOnTaxCard: string | null;
+    commercialRegistry: string | null;
+    nationalId: string | null;
     contactPerson: string | null;
     contactPhone: string | null;
+    primaryPhone: string | null;
+    primaryPhoneWhatsapp: boolean;
+    altPhone: string | null;
+    altPhoneWhatsapp: boolean;
     email: string | null;
     address: string | null;
     taxOffice: string | null;
@@ -92,8 +99,21 @@ export function Customer360Page() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="stamp-card p-5">
           <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("customers.profile")}</h3>
-          <Info label={t("customers.contactPerson")} value={customer.contactPerson} />
-          <Info label={t("customers.contactPhone")} value={customer.contactPhone} mono />
+          <Info label={t("customers.nameOnTaxCard")} value={customer.nameOnTaxCard} />
+          <Info label={t("customers.commercialRegistry")} value={customer.commercialRegistry} mono />
+          <Info label={t("customers.nationalId")} value={customer.nationalId} mono />
+          <Info
+            label={t("customers.primaryPhone")}
+            value={customer.primaryPhone ?? customer.contactPhone}
+            mono
+            badge={customer.primaryPhone && customer.primaryPhoneWhatsapp ? t("customers.whatsapp") : null}
+          />
+          <Info
+            label={t("customers.altPhone")}
+            value={customer.altPhone}
+            mono
+            badge={customer.altPhone && customer.altPhoneWhatsapp ? t("customers.whatsapp") : null}
+          />
           <Info label={t("common.email")} value={customer.email} mono />
           <Info label={t("customers.taxOffice")} value={customer.taxOffice} />
           <Info label={t("customers.businessActivity")} value={customer.businessActivity} />
@@ -207,11 +227,18 @@ export function Customer360Page() {
   );
 }
 
-function Info({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+function Info({ label, value, mono, badge }: { label: string; value: string | null | undefined; mono?: boolean; badge?: string | null }) {
   return (
     <div className="mb-2">
       <div className="text-xs text-muted">{label}</div>
-      <div className={"text-sm " + (mono ? "font-mono" : "")}>{value || "—"}</div>
+      <div className={"text-sm flex items-center gap-2 " + (mono ? "font-mono" : "")}>
+        <span>{value || "—"}</span>
+        {badge && (
+          <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+            {badge}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

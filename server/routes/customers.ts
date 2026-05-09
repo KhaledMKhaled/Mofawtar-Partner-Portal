@@ -30,6 +30,8 @@ customersRouter.get("/", requirePerm("customers:view"), async (req, res) => {
     name: customers.name,
     contactPerson: customers.contactPerson,
     contactPhone: customers.contactPhone,
+    primaryPhone: customers.primaryPhone,
+    primaryPhoneWhatsapp: customers.primaryPhoneWhatsapp,
     email: customers.email,
     createdAt: customers.createdAt,
   };

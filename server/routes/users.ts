@@ -196,9 +196,11 @@ usersRouter.patch("/:id", requirePerm("users:edit"), async (req, res) => {
 usersRouter.get("/sales-assignable", requirePerm("requests:create"), async (req, res) => {
   const cu = getUser(req)!;
   let partnerId: number | null = cu.partnerId ?? null;
+  // Company users must pass ?partnerId= because they aren't bound to a partner.
   if (!partnerId && req.query.partnerId) partnerId = Number(req.query.partnerId);
   if (!partnerId) return res.json([]);
-  const filters = [eq(users.partnerId, partnerId), eq(roles.key, "sales")];
+  const filters = [eq(users.partnerId, partnerId), eq(roles.key, "sales"), eq(users.status, "active")];
+  // Each team leader is responsible only for their own sales reps.
   if (cu.roleKey === "team_leader") filters.push(eq(users.teamLeaderId, cu.id));
   const rows = await db
     .select({ id: users.id, name: users.name, email: users.email })

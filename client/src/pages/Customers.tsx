@@ -14,6 +14,8 @@ interface Row {
   name: string;
   contactPerson: string | null;
   contactPhone: string | null;
+  primaryPhone: string | null;
+  primaryPhoneWhatsapp: boolean;
   email: string | null;
   createdAt: string;
 }
@@ -60,7 +62,7 @@ export function CustomersPage() {
               <th>{t("customers.taxCard")}</th>
               <th>{t("customers.businessName")}</th>
               <th>{t("customers.contactPerson")}</th>
-              <th>{t("customers.contactPhone")}</th>
+              <th>{t("customers.primaryPhone")}</th>
               <th>{t("common.email")}</th>
               <th>{t("common.createdAt")}</th>
             </tr>
@@ -77,7 +79,14 @@ export function CustomersPage() {
                 <td className="font-mono text-xs"><Link to={`/customers/${c.id}`} className="text-violet-700 hover:underline">{c.taxCardNumber}</Link></td>
                 <td className="font-medium"><Link to={`/customers/${c.id}`} className="hover:text-violet-700">{c.name}</Link></td>
                 <td>{c.contactPerson ?? "—"}</td>
-                <td className="font-mono text-xs">{c.contactPhone ?? "—"}</td>
+                <td className="font-mono text-xs">
+                  {c.primaryPhone ?? c.contactPhone ?? "—"}
+                  {c.primaryPhone && c.primaryPhoneWhatsapp && (
+                    <span className="ms-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+                      {t("customers.whatsapp")}
+                    </span>
+                  )}
+                </td>
                 <td className="text-xs">{c.email ?? "—"}</td>
                 <td className="text-xs text-muted">{new Date(c.createdAt).toLocaleDateString()}</td>
               </tr>
