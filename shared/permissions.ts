@@ -90,13 +90,27 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   ],
   partner_admin: [
     ...view("dashboard", "ownership", "reports", "packages"),
-    ...all("users", "customers", "requests"),
+    ...all("users", "customers"),
+    // Partners can fully manage requests EXCEPT changing their lifecycle
+    // status — status transitions (received → under_activation → activated /
+    // failed / rejected) are the exclusive responsibility of the parent
+    // company team. Reopening from a terminal status remains a separate
+    // permission and is not granted here either.
+    "requests:view",
+    "requests:create",
+    "requests:edit",
+    "requests:delete",
+    "requests:approve",
+    "requests:reject",
+    "requests:export",
+    "requests:import",
+    "requests:reassign",
+    "requests:manage",
     ...view("payments", "partner_commissions", "claims", "settlements", "audit_log"),
     "payments:change_status",
     "partner_commissions:change_status",
     "claims:create",
     "claims:view",
-    "requests:reassign",
     "audit_log:view",
     "reports:view",
     "reports:export",
