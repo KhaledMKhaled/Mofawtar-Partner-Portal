@@ -494,13 +494,22 @@ export function RequestWizard({
         const finalPrice = pkg ? Number(pkg.finalPriceAfterTax) : 0;
         const beforeTax = pkg ? Number(pkg.itemPriceBeforeTax) : 0;
         const taxAmount = Math.max(0, finalPrice - beforeTax);
+        const onPrint = () => {
+          document.body.classList.add("pos-print-mode");
+          const cleanup = () => {
+            document.body.classList.remove("pos-print-mode");
+            window.removeEventListener("afterprint", cleanup);
+          };
+          window.addEventListener("afterprint", cleanup);
+          try { window.print(); } finally { setTimeout(cleanup, 1500); }
+        };
         return (
           <div>
-            <p className="text-sm text-muted mb-3">{t("wizard.step4.intro")}</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <p className="text-sm text-muted mb-4">{t("wizard.step4.intro")}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-start">
               {/* Written summary */}
-              <div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-border bg-white p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                   <Summary label={t("wizard.srNumber")} value={draft.request.srNumber} mono />
                   <Summary label={t("wizard.taxCard")} value={tax} mono />
                   <Summary label={t("customers.businessName")} value={customer.name} />
@@ -514,85 +523,64 @@ export function RequestWizard({
                 </div>
               </div>
 
-              {/* POS receipt */}
-              <div>
-                <div className="flex items-center justify-end mb-3">
-                  <button
-                    type="button"
-                    className="btn-outline btn-xs flex items-center gap-1 text-xs"
-                    onClick={() => {
-                      document.body.classList.add("pos-print-mode");
-                      const cleanup = () => {
-                        document.body.classList.remove("pos-print-mode");
-                        window.removeEventListener("afterprint", cleanup);
-                      };
-                      window.addEventListener("afterprint", cleanup);
-                      try { window.print(); } finally { setTimeout(cleanup, 1000); }
-                    }}
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    {t("wizard.step4.printReceipt")}
-                  </button>
-                </div>
-                <div className="pos-print pos-receipt mx-auto" dir="ltr">
-                  <h2>MOFAWTER</h2>
-                  <div className="pos-center pos-small">{partnerName}</div>
-                  <div className="pos-sep" />
-                  <div className="pos-row pos-bold">
-                    <span>SR #</span>
-                    <span>{draft.request.srNumber}</span>
+              {/* POS receipt — fixed 80mm column */}
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  className="self-stretch inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 px-3 py-1.5 text-xs font-semibold"
+                  onClick={onPrint}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {t("wizard.step4.printReceipt")}
+                </button>
+                <div
+                  className="pos-print bg-white text-black border border-dashed border-zinc-400 rounded-md shadow-sm"
+                  style={{
+                    width: "80mm",
+                    padding: "6mm 4mm",
+                    fontFamily: '"Courier New", "Lucida Console", monospace',
+                    fontSize: "11px",
+                    lineHeight: 1.5,
+                  }}
+                  dir="ltr"
+                >
+                  <div style={{ fontSize: "16px", fontWeight: 800, textAlign: "center", letterSpacing: "0.05em" }}>
+                    MOFAWTER
                   </div>
-                  <div className="pos-row pos-small">
-                    <span>Date</span>
-                    <span>{new Date().toLocaleString("en-GB")}</span>
-                  </div>
-                  <div className="pos-sep" />
-                  <div className="pos-bold">CUSTOMER</div>
-                  <div className="pos-row"><span>Name</span><span>{customer.name}</span></div>
-                  <div className="pos-row"><span>Tax Card</span><span>{tax}</span></div>
-                  {customer.commercialRegistry && (
-                    <div className="pos-row"><span>CR No.</span><span>{customer.commercialRegistry}</span></div>
-                  )}
-                  {customer.nationalId && (
-                    <div className="pos-row"><span>National ID</span><span>{customer.nationalId}</span></div>
-                  )}
+                  <div style={{ textAlign: "center", fontSize: "10px" }}>{partnerName}</div>
+                  <Sep />
+                  <Row label="SR #" value={draft.request.srNumber} bold />
+                  <Row label="Date" value={new Date().toLocaleString("en-GB")} small />
+                  <Sep />
+                  <div style={{ fontWeight: 700 }}>CUSTOMER</div>
+                  <Row label="Name" value={customer.name} />
+                  <Row label="Tax Card" value={tax} />
+                  {customer.commercialRegistry && <Row label="CR No." value={customer.commercialRegistry} />}
+                  {customer.nationalId && <Row label="National ID" value={customer.nationalId} />}
                   {customer.primaryPhone && (
-                    <div className="pos-row">
-                      <span>Phone</span>
-                      <span>{customer.primaryPhone}{customer.primaryPhoneWhatsapp ? " (WA)" : ""}</span>
-                    </div>
+                    <Row label="Phone" value={`${customer.primaryPhone}${customer.primaryPhoneWhatsapp ? " (WA)" : ""}`} />
                   )}
                   {customer.altPhone && (
-                    <div className="pos-row">
-                      <span>Alt Phone</span>
-                      <span>{customer.altPhone}{customer.altPhoneWhatsapp ? " (WA)" : ""}</span>
-                    </div>
+                    <Row label="Alt Phone" value={`${customer.altPhone}${customer.altPhoneWhatsapp ? " (WA)" : ""}`} />
                   )}
-                  {customer.email && (
-                    <div className="pos-row pos-small"><span>Email</span><span>{customer.email}</span></div>
-                  )}
-                  <div className="pos-sep" />
-                  <div className="pos-bold">REQUEST</div>
-                  <div className="pos-row"><span>Operation</span><span>{operationType || "—"}</span></div>
-                  <div className="pos-row"><span>Package</span><span>{pkg?.name ?? "—"}</span></div>
-                  {realReceiptNumber && (
-                    <div className="pos-row"><span>Receipt #</span><span>{realReceiptNumber}</span></div>
-                  )}
-                  <div className="pos-row"><span>Sales Rep</span><span>{salesName}</span></div>
-                  <div className="pos-sep" />
-                  <div className="pos-bold">AMOUNT</div>
-                  <div className="pos-row"><span>Subtotal</span><span>{beforeTax.toFixed(2)}</span></div>
-                  <div className="pos-row"><span>Tax</span><span>{taxAmount.toFixed(2)}</span></div>
-                  <div className="pos-sep" />
-                  <div className="pos-row pos-total"><span>TOTAL</span><span>{finalPrice.toFixed(2)} EGP</span></div>
-                  <div className="pos-sep" />
-                  <div className="pos-row pos-small">
-                    <span>Collection</span>
-                    <span>{collectionConfirmed ? "CONFIRMED" : "PENDING"}</span>
-                  </div>
-                  <div className="pos-sep" />
-                  <div className="pos-center pos-small">Thank you</div>
-                  <div className="pos-center pos-small">{draft.request.srNumber}</div>
+                  {customer.email && <Row label="Email" value={customer.email} small />}
+                  <Sep />
+                  <div style={{ fontWeight: 700 }}>REQUEST</div>
+                  <Row label="Operation" value={operationType || "—"} />
+                  <Row label="Package" value={pkg?.name ?? "—"} />
+                  {realReceiptNumber && <Row label="Receipt #" value={realReceiptNumber} />}
+                  <Row label="Sales Rep" value={salesName} />
+                  <Sep />
+                  <div style={{ fontWeight: 700 }}>AMOUNT</div>
+                  <Row label="Subtotal" value={beforeTax.toFixed(2)} />
+                  <Row label="Tax" value={taxAmount.toFixed(2)} />
+                  <Sep />
+                  <Row label="TOTAL" value={`${finalPrice.toFixed(2)} EGP`} bold big />
+                  <Sep />
+                  <Row label="Collection" value={collectionConfirmed ? "CONFIRMED" : "PENDING"} small />
+                  <Sep />
+                  <div style={{ textAlign: "center", fontSize: "10px", marginTop: 4 }}>Thank you</div>
+                  <div style={{ textAlign: "center", fontSize: "10px" }}>{draft.request.srNumber}</div>
                 </div>
               </div>
             </div>
@@ -600,6 +588,26 @@ export function RequestWizard({
         );
       })()}
     </Modal>
+  );
+}
+
+function Sep() {
+  return <div style={{ borderTop: "1px dashed #000", margin: "5px 0" }} />;
+}
+function Row({ label, value, bold, small, big }: { label: string; value: string; bold?: boolean; small?: boolean; big?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 8,
+        fontWeight: bold ? 700 : 400,
+        fontSize: big ? "13px" : small ? "10px" : "11px",
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ textAlign: "end", wordBreak: "break-word" }}>{value}</span>
+    </div>
   );
 }
 
