@@ -1,12 +1,24 @@
 import { Router } from "express";
 import { z } from "zod";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { users, roles, partners } from "../schema.js";
 import { getUser, hashPassword, requirePerm } from "../auth.js";
 import { audit } from "../audit.js";
 
 export const usersRouter = Router();
+
+// Partner Admin can only assign these partner-scoped roles when creating or
+// editing users (cannot create another partner_admin or any company role).
+const PARTNER_ADMIN_ASSIGNABLE_ROLES = new Set([
+  "partner_accountant",
+  "team_leader",
+  "sales",
+]);
+
+function isPgError(e: unknown): e is { code: string } {
+  return typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string";
+}
 
 const baseSelect = {
   id: users.id,
@@ -33,14 +45,14 @@ usersRouter.get("/", requirePerm("users:view"), async (req, res) => {
       ? Number(req.query.partnerId)
       : null;
 
-  const where = partnerFilter ? eq(users.partnerId, partnerFilter) : undefined;
-  const rows = await db
+  const baseQuery = db
     .select(baseSelect)
     .from(users)
     .innerJoin(roles, eq(roles.id, users.roleId))
-    .leftJoin(partners, eq(partners.id, users.partnerId))
-    .where(where as any)
-    .orderBy(desc(users.createdAt));
+    .leftJoin(partners, eq(partners.id, users.partnerId));
+  const rows = partnerFilter
+    ? await baseQuery.where(eq(users.partnerId, partnerFilter)).orderBy(desc(users.createdAt))
+    : await baseQuery.orderBy(desc(users.createdAt));
   res.json(rows);
 });
 
@@ -73,8 +85,10 @@ usersRouter.post("/", requirePerm("users:create"), async (req, res) => {
   if (role.scope === "partner" && !partnerId) return res.status(400).json({ error: "partner_required" });
   if (role.scope === "company") partnerId = null;
 
-  // Partner Admin cannot create company-scoped users
-  if (cu.roleKey === "partner_admin" && role.scope !== "partner") {
+  // Partner Admin can only create the explicitly allowed partner-scoped roles
+  // (Partner Accountant, Team Leader, Sales) — never another Partner Admin
+  // and never company-scoped roles.
+  if (cu.roleKey === "partner_admin" && !PARTNER_ADMIN_ASSIGNABLE_ROLES.has(role.key)) {
     return res.status(403).json({ error: "forbidden_role" });
   }
 
@@ -103,8 +117,8 @@ usersRouter.post("/", requirePerm("users:create"), async (req, res) => {
       partnerId: u.partnerId ?? undefined,
     });
     res.status(201).json(u);
-  } catch (e: any) {
-    if (e.code === "23505") return res.status(409).json({ error: "email_taken" });
+  } catch (e) {
+    if (isPgError(e) && e.code === "23505") return res.status(409).json({ error: "email_taken" });
     console.error(e);
     res.status(500).json({ error: "server_error" });
   }
@@ -125,15 +139,18 @@ usersRouter.patch("/:id", requirePerm("users:edit"), async (req, res) => {
   if (d.roleId !== undefined) {
     const [newRole] = await db.select().from(roles).where(eq(roles.id, d.roleId));
     if (!newRole) return res.status(400).json({ error: "invalid_role" });
-    if (cu.roleKey === "partner_admin" && newRole.scope !== "partner") {
+    if (cu.roleKey === "partner_admin" && !PARTNER_ADMIN_ASSIGNABLE_ROLES.has(newRole.key)) {
       return res.status(403).json({ error: "forbidden_role" });
     }
   }
-  const update: any = { updatedAt: new Date() };
-  for (const k of ["name", "email", "roleId", "address", "imageUrl", "status", "teamLeaderId"] as const) {
-    if ((d as any)[k] !== undefined) update[k] = (d as any)[k];
-  }
-  if (d.email) update.email = d.email.toLowerCase();
+  const update: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+  if (d.name !== undefined) update.name = d.name;
+  if (d.email !== undefined) update.email = d.email.toLowerCase();
+  if (d.roleId !== undefined) update.roleId = d.roleId;
+  if (d.address !== undefined) update.address = d.address;
+  if (d.imageUrl !== undefined) update.imageUrl = d.imageUrl;
+  if (d.status !== undefined) update.status = d.status;
+  if (d.teamLeaderId !== undefined) update.teamLeaderId = d.teamLeaderId;
   if (d.password) update.passwordHash = await hashPassword(d.password);
   // partnerId is locked for partner-scoped users
   if (cu.roleKey === "company_super_admin" && d.partnerId !== undefined) update.partnerId = d.partnerId;

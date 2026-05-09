@@ -153,7 +153,11 @@ const ROLE_SCOPE: Record<RoleKey, "company" | "partner"> = {
 };
 
 export async function runSeed() {
-  // Roles
+  // Roles — only inserted when missing, so admin edits to default roles
+  // remain durable across restarts. Operators who want to refresh the
+  // baseline permissions for a system role can run this script directly
+  // with RESEED_ROLE_PERMISSIONS=1 (one-time refresh, never on boot).
+  const refreshDefaults = process.env.RESEED_ROLE_PERMISSIONS === "1";
   for (const key of ROLE_KEYS) {
     const existing = await db.select().from(roles).where(eq(roles.key, key));
     const labels = ROLE_LABELS[key];
@@ -166,8 +170,7 @@ export async function runSeed() {
         isSystem: true,
         permissions: DEFAULT_ROLE_PERMISSIONS[key] as unknown as string[],
       });
-    } else {
-      // Refresh permissions for system roles to keep them up to date with code
+    } else if (refreshDefaults) {
       await db
         .update(roles)
         .set({ permissions: DEFAULT_ROLE_PERMISSIONS[key] as unknown as string[] })

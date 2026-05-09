@@ -32,14 +32,36 @@ interface Role {
 
 interface Partner { id: number; name: string }
 
-const blank = {
+type UserStatus = "active" | "inactive";
+
+interface UserForm {
+  name: string;
+  email: string;
+  password: string;
+  roleId: number;
+  partnerId: number | null;
+  teamLeaderId: number | null;
+  status: UserStatus;
+}
+
+const PARTNER_ADMIN_ASSIGNABLE_ROLES = new Set([
+  "partner_accountant",
+  "team_leader",
+  "sales",
+]);
+
+function asUserStatus(v: string): UserStatus {
+  return v === "inactive" ? "inactive" : "active";
+}
+
+const blank: UserForm = {
   name: "",
   email: "",
   password: "",
   roleId: 0,
-  partnerId: null as number | null,
-  teamLeaderId: null as number | null,
-  status: "active" as "active" | "inactive",
+  partnerId: null,
+  teamLeaderId: null,
+  status: "active",
 };
 
 export function UsersPage() {
@@ -63,20 +85,22 @@ export function UsersPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
-  const [form, setForm] = useState(blank);
+  const [form, setForm] = useState<UserForm>(blank);
   const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
-    mutationFn: (data: any) => api("/api/users", { method: "POST", json: data }),
+    mutationFn: (data: Record<string, unknown>) => api("/api/users", { method: "POST", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); },
   });
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => api(`/api/users/${id}`, { method: "PATCH", json: data }),
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      api(`/api/users/${id}`, { method: "PATCH", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); },
   });
 
   const availableRoles = (rolesQ.data || []).filter((r) => {
-    if (me?.roleKey === "partner_admin") return r.scope === "partner";
+    // Partner Admin may only assign Partner Accountant / Team Leader / Sales.
+    if (me?.roleKey === "partner_admin") return PARTNER_ADMIN_ASSIGNABLE_ROLES.has(r.key);
     return true;
   });
 
@@ -91,7 +115,7 @@ export function UsersPage() {
     setForm({
       name: u.name, email: u.email, password: "",
       roleId: u.roleId, partnerId: u.partnerId, teamLeaderId: u.teamLeaderId,
-      status: u.status as any,
+      status: asUserStatus(u.status),
     });
     setError(null);
     setOpen(true);
@@ -99,14 +123,15 @@ export function UsersPage() {
   const submit = async () => {
     setError(null);
     try {
-      const data: any = { ...form };
+      const data: Record<string, unknown> = { ...form };
       if (editing && !form.password) delete data.password;
       const role = availableRoles.find((r) => r.id === form.roleId);
       if (role?.scope === "company") data.partnerId = null;
       if (editing) await update.mutateAsync({ id: editing.id, data });
       else await create.mutateAsync(data);
-    } catch (e: any) {
-      setError(e?.body?.error || e?.message || "failed");
+    } catch (e) {
+      const err = e as { body?: { error?: string }; message?: string };
+      setError(err?.body?.error || err?.message || "failed");
     }
   };
 
@@ -225,7 +250,7 @@ export function UsersPage() {
           )}
           <Field label={t("common.status")}>
             <select className="input" value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
+              onChange={(e) => setForm({ ...form, status: asUserStatus(e.target.value) })}>
               <option value="active">{t("common.active")}</option>
               <option value="inactive">{t("common.inactive")}</option>
             </select>

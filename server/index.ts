@@ -53,7 +53,7 @@ app.use("/api/roles", rolesRouter);
 app.use("/api/packages", packagesRouter);
 app.use("/api/settings", settingsRouter);
 
-app.use((err: any, _req: any, res: any, _next: any) => {
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("unhandled error", err);
   res.status(500).json({ error: "server_error" });
 });
