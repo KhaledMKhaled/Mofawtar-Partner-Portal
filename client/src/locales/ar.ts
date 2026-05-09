@@ -148,6 +148,7 @@ export const ar: Translations = {
     none: "—",
     selectPartnerFirst: "اختر الشريك أولاً",
     noTeamLeadersForPartner: "لا يوجد قادة فرق لهذا الشريك — أنشئ قائد فريق أولاً",
+    email_taken: "هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر.",
     cannotEditOwnRole: "لا يمكنك تغيير دورك الخاص",
     cannotEditOwnStatus: "لا يمكنك تغيير حالة حسابك",
   },

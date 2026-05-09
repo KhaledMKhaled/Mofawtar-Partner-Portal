@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { partners, users, roles } from "../schema.js";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { getUser, hashPassword, requirePerm } from "../auth.js";
 import { audit } from "../audit.js";
 
@@ -62,6 +62,16 @@ partnersRouter.post("/", requirePerm("partners:create"), async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
   const data = parsed.data;
   const cu = getUser(req)!;
+  const adminEmail = data.adminEmail.toLowerCase();
+
+  // Pre-check: ensure the admin email isn't already used by any user.
+  // Done before inserting the partner so we never leave an orphan partner row.
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${adminEmail}`)
+    .limit(1);
+  if (existing.length > 0) return res.status(409).json({ error: "email_taken" });
 
   try {
     const [partner] = await db
@@ -90,17 +100,27 @@ partnersRouter.post("/", requirePerm("partners:create"), async (req, res) => {
     if (!adminRole) throw new Error("partner_admin role missing");
 
     const hash = await hashPassword(data.adminPassword);
-    const [adminUser] = await db
-      .insert(users)
-      .values({
-        name: data.adminName,
-        email: data.adminEmail.toLowerCase(),
-        passwordHash: hash,
-        roleId: adminRole.id,
-        partnerId: partner.id,
-        status: "active",
-      })
-      .returning();
+    let adminUser;
+    try {
+      [adminUser] = await db
+        .insert(users)
+        .values({
+          name: data.adminName,
+          email: adminEmail,
+          passwordHash: hash,
+          roleId: adminRole.id,
+          partnerId: partner.id,
+          status: "active",
+        })
+        .returning();
+    } catch (innerErr) {
+      // Roll back the partner row on any user-insert failure (incl. race condition email collision).
+      await db.delete(partners).where(eq(partners.id, partner.id));
+      if (isPgError(innerErr) && innerErr.code === "23505") {
+        return res.status(409).json({ error: "email_taken" });
+      }
+      throw innerErr;
+    }
 
     await audit({
       userId: cu.id,

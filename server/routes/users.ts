@@ -170,7 +170,13 @@ usersRouter.patch("/:id", requirePerm("users:edit"), async (req, res) => {
   // partnerId is locked for partner-scoped users
   if (cu.roleKey === "company_super_admin" && d.partnerId !== undefined) update.partnerId = d.partnerId;
 
-  const [u] = await db.update(users).set(update).where(eq(users.id, id)).returning();
+  let u: typeof users.$inferSelect;
+  try {
+    [u] = await db.update(users).set(update).where(eq(users.id, id)).returning();
+  } catch (e) {
+    if (isPgError(e) && e.code === "23505") return res.status(409).json({ error: "email_taken" });
+    throw e;
+  }
   await audit({
     userId: cu.id,
     action: "user.updated",

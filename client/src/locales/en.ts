@@ -146,6 +146,7 @@ export const en = {
     none: "—",
     selectPartnerFirst: "Select a partner first",
     noTeamLeadersForPartner: "No team leaders exist for this partner — create one first",
+    email_taken: "This email address is already in use by another account.",
     cannotEditOwnRole: "You cannot change your own role",
     cannotEditOwnStatus: "You cannot change your own account status",
   },
