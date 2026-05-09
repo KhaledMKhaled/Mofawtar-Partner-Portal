@@ -181,9 +181,24 @@ requestsRouter.get("/lookup/:tax", requirePerm("requests:view"), async (req, res
     }
   }
 
+  // Partner-scoped users may not see PII for customers they don't own and have
+  // never had a request for — return only minimal gating metadata.
+  let exposedCustomer: typeof cust | { id: number; taxCardNumber: string } = cust;
+  if (partnerScoped(cu)) {
+    const [hasReq] = await db
+      .select({ id: requests.id })
+      .from(requests)
+      .where(and(eq(requests.customerId, cust.id), eq(requests.partnerId, cu.partnerId!)))
+      .limit(1);
+    const ownsNow = owner && owner.partnerId === cu.partnerId;
+    if (!hasReq && !ownsNow) {
+      exposedCustomer = { id: cust.id, taxCardNumber: cust.taxCardNumber };
+    }
+  }
+
   res.json({
     found: true,
-    customer: cust,
+    customer: exposedCustomer,
     currentOwner: owner,
     activeRequests: inProgress,
     canCreate,
