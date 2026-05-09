@@ -20,6 +20,7 @@ interface User {
   partnerId: number | null;
   partnerName: string | null;
   teamLeaderId: number | null;
+  teamLeaderName: string | null;
 }
 
 interface Role {
@@ -165,19 +166,21 @@ export function UsersPage() {
               <th>{t("common.email")}</th>
               <th>{t("common.role")}</th>
               <th>{t("common.partner")}</th>
+              <th>{t("users.teamLeader")}</th>
               <th>{t("common.status")}</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {usersQ.isLoading && <tr><td colSpan={6} className="text-center text-muted py-8">{t("common.loading")}</td></tr>}
-            {usersQ.data?.length === 0 && <tr><td colSpan={6} className="text-center text-muted py-8">{t("common.noData")}</td></tr>}
+            {usersQ.isLoading && <tr><td colSpan={7} className="text-center text-muted py-8">{t("common.loading")}</td></tr>}
+            {usersQ.data?.length === 0 && <tr><td colSpan={7} className="text-center text-muted py-8">{t("common.noData")}</td></tr>}
             {usersQ.data?.map((u) => (
               <tr key={u.id}>
                 <td className="font-medium">{u.name}</td>
                 <td className="font-mono text-xs" dir="ltr">{u.email}</td>
                 <td><span className="pill-violet">{isAr ? u.roleNameAr : u.roleNameEn}</span></td>
                 <td>{u.partnerName || t("users.none")}</td>
+                <td>{u.teamLeaderName || t("users.none")}</td>
                 <td>
                   <span className={u.status === "active" ? "pill-success" : "pill-muted"}>
                     {t(`common.${u.status}`)}

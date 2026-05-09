@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db.js";
 import { users, roles, partners } from "../schema.js";
 import { getUser, hashPassword, requirePerm } from "../auth.js";
@@ -20,6 +21,9 @@ function isPgError(e: unknown): e is { code: string } {
   return typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string";
 }
 
+// Alias for self-join to fetch the team leader's name.
+const teamLeaders = alias(users, "team_leaders");
+
 const baseSelect = {
   id: users.id,
   name: users.name,
@@ -34,6 +38,7 @@ const baseSelect = {
   partnerId: users.partnerId,
   partnerName: partners.name,
   teamLeaderId: users.teamLeaderId,
+  teamLeaderName: teamLeaders.name,
   createdAt: users.createdAt,
 };
 
@@ -49,7 +54,8 @@ usersRouter.get("/", requirePerm("users:view"), async (req, res) => {
     .select(baseSelect)
     .from(users)
     .innerJoin(roles, eq(roles.id, users.roleId))
-    .leftJoin(partners, eq(partners.id, users.partnerId));
+    .leftJoin(partners, eq(partners.id, users.partnerId))
+    .leftJoin(teamLeaders, eq(teamLeaders.id, users.teamLeaderId));
   const rows = partnerFilter
     ? await baseQuery.where(eq(users.partnerId, partnerFilter)).orderBy(desc(users.createdAt))
     : await baseQuery.orderBy(desc(users.createdAt));
