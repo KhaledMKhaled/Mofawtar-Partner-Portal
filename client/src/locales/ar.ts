@@ -222,6 +222,7 @@ export const ar: Translations = {
     toDate: "إلى تاريخ",
     reassigned: "تم إعادة الإسناد",
     changeStatus: "تغيير الحالة",
+    submitRequest: "إرسال الطلب",
     newStatus: "الحالة الجديدة",
     reason: "السبب",
     reasonRequired: "السبب مطلوب للفشل أو الرفض.",

@@ -60,6 +60,9 @@ export function RequestDetailPage() {
   const transition = useMutation({
     mutationFn: () => api(`/api/requests/${id}/transition`, { method: "POST", json: { toStatus, reason } }),
   });
+  const submit = useMutation({
+    mutationFn: () => api(`/api/requests/${id}/submit`, { method: "POST" }),
+  });
   const reopen = useMutation({
     mutationFn: () => api(`/api/requests/${id}/reopen`, { method: "POST", json: { toStatus, reason } }),
   });
@@ -102,6 +105,18 @@ export function RequestDetailPage() {
     }
   };
 
+  const runSubmit = async () => {
+    setError(null);
+    try {
+      await submit.mutateAsync();
+      qc.invalidateQueries({ queryKey: ["request", id] });
+      qc.invalidateQueries({ queryKey: ["requests"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    } catch (e) {
+      setError(e instanceof ApiError ? (typeof e.body === "object" && e.body?.error) || e.message : String(e));
+    }
+  };
+
   return (
     <div>
       <Link to="/requests" className="text-violet-700 text-sm inline-flex items-center gap-1 mb-2">
@@ -112,7 +127,16 @@ export function RequestDetailPage() {
         subtitle={`${request.customerName ?? ""} · ${request.taxCardNumber ?? ""}`}
         actions={
           <div className="flex gap-2 flex-wrap">
-            {allowed.length > 0 && can(user, "requests:change_status") && (
+            {request.status === "draft_sr" && can(user, "requests:create") && (
+              <button
+                className="btn-primary"
+                disabled={submit.isPending}
+                onClick={runSubmit}
+              >
+                {submit.isPending ? t("common.loading") : t("requests.submitRequest")}
+              </button>
+            )}
+            {request.status !== "draft_sr" && allowed.length > 0 && can(user, "requests:change_status") && (
               <button className="btn-primary" onClick={() => { setShowAction("transition"); setToStatus(allowed[0]); }}>
                 {t("requests.changeStatus")}
               </button>
@@ -130,6 +154,12 @@ export function RequestDetailPage() {
           </div>
         }
       />
+
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">
+          {t(`wizard.errors.${error}`, error)}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="stamp-card p-5 lg:col-span-2">
