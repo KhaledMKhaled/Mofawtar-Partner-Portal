@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { db } from "../db.js";
 import { users, passwordResets } from "../schema.js";
 import { and, eq, gt, isNull } from "drizzle-orm";
@@ -76,9 +76,13 @@ authRouter.post("/forgot-password", async (req, res) => {
     // Don't leak which emails exist.
     return res.json({ ok: true });
   }
-  const token = randomBytes(24).toString("hex");
+  // The raw token is delivered to the user (out-of-band in prod, echoed in
+  // dev demo mode). Only its SHA-256 hash is persisted at rest, so a leaked
+  // password_resets row cannot be used to take over the account.
+  const rawToken = randomBytes(24).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-  await db.insert(passwordResets).values({ userId: u.id, token, expiresAt });
+  await db.insert(passwordResets).values({ userId: u.id, token: tokenHash, expiresAt });
   await audit({
     userId: u.id,
     action: "user.password_reset_requested",
@@ -94,7 +98,7 @@ authRouter.post("/forgot-password", async (req, res) => {
   }
   res.json({
     ok: true,
-    demoToken: token,
+    demoToken: rawToken,
     demoNote: "In production this link would be emailed to the user.",
   });
 });
@@ -109,12 +113,13 @@ authRouter.post("/reset-password", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid_input" });
   const { token, newPassword } = parsed.data;
   const now = new Date();
+  const tokenHash = createHash("sha256").update(token).digest("hex");
   const [row] = await db
     .select()
     .from(passwordResets)
     .where(
       and(
-        eq(passwordResets.token, token),
+        eq(passwordResets.token, tokenHash),
         isNull(passwordResets.usedAt),
         gt(passwordResets.expiresAt, now),
       ),

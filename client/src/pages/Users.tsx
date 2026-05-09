@@ -218,7 +218,8 @@ export function UsersPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
           <Field label={t("common.password")} required={!editing} hint={editing ? "Leave blank to keep current" : "≥ 8 chars"}>
-            <input type="text" dir="ltr" className="input" value={form.password}
+            <input type="password" dir="ltr" className="input" value={form.password}
+              autoComplete="new-password"
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </Field>
           <Field label={t("common.role")} required>

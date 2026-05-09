@@ -292,7 +292,8 @@ export function PartnersPage() {
                   onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
               </Field>
               <Field label={t("partners.adminPassword")} required hint="≥ 8 chars">
-                <input type="text" dir="ltr" className="input" value={form.adminPassword}
+                <input type="password" dir="ltr" className="input" value={form.adminPassword}
+                  autoComplete="new-password"
                   onChange={(e) => setForm({ ...form, adminPassword: e.target.value })} />
               </Field>
             </div>
