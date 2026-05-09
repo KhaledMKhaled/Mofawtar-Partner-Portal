@@ -32,14 +32,41 @@ export function RequestsPage() {
   const [status, setStatus] = useState("");
   const [operationType, setOperationType] = useState("");
   const [q, setQ] = useState("");
+  const [partnerId, setPartnerId] = useState("");
+  const [salesUserId, setSalesUserId] = useState("");
+  const [packageId, setPackageId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+
+  const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
+  const partnersQ = useQuery({
+    queryKey: ["partners-min"],
+    queryFn: () => api<{ id: number; name: string }[]>("/api/partners"),
+    enabled: isCompany,
+  });
+  const salesQ = useQuery({
+    queryKey: ["sales-assignable", partnerId],
+    queryFn: () => api<{ id: number; name: string }[]>(`/api/users/sales-assignable${partnerId ? `?partnerId=${partnerId}` : ""}`),
+    enabled: !!user && (isCompany ? !!partnerId : true),
+  });
+  const packagesQ = useQuery({
+    queryKey: ["packages-min"],
+    queryFn: () => api<{ id: number; name: string }[]>("/api/packages"),
+  });
+
   const list = useQuery({
-    queryKey: ["requests", { status, operationType, q }],
+    queryKey: ["requests", { status, operationType, q, partnerId, salesUserId, packageId, fromDate, toDate }],
     queryFn: () => {
       const p = new URLSearchParams();
       if (status) p.set("status", status);
       if (operationType) p.set("operationType", operationType);
       if (q) p.set("q", q);
+      if (partnerId) p.set("partnerId", partnerId);
+      if (salesUserId) p.set("salesUserId", salesUserId);
+      if (packageId) p.set("packageId", packageId);
+      if (fromDate) p.set("fromDate", fromDate);
+      if (toDate) p.set("toDate", toDate);
       return api<Row[]>(`/api/requests?${p.toString()}`);
     },
   });
@@ -58,7 +85,7 @@ export function RequestsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
         <div className="relative md:col-span-2">
           <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />
           <input className="input ps-9" placeholder={t("requests.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -71,6 +98,24 @@ export function RequestsPage() {
           <option value="">{t("requests.allOperations")}</option>
           {OPERATION_TYPES.map((o) => <option key={o} value={o}>{t(`operationTypes.${o}`)}</option>)}
         </select>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        {isCompany && (
+          <select className="input" value={partnerId} onChange={(e) => { setPartnerId(e.target.value); setSalesUserId(""); }}>
+            <option value="">{t("requests.allPartners")}</option>
+            {partnersQ.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
+        <select className="input" value={salesUserId} onChange={(e) => setSalesUserId(e.target.value)}>
+          <option value="">{t("requests.allSales")}</option>
+          {salesQ.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select className="input" value={packageId} onChange={(e) => setPackageId(e.target.value)}>
+          <option value="">{t("requests.allPackages")}</option>
+          {packagesQ.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <input type="date" className="input" value={fromDate} onChange={(e) => setFromDate(e.target.value)} title={t("requests.fromDate")} />
+        <input type="date" className="input" value={toDate} onChange={(e) => setToDate(e.target.value)} title={t("requests.toDate")} />
       </div>
 
       <div className="table-wrap">

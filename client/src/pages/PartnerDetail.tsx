@@ -57,10 +57,11 @@ export function PartnerDetailPage() {
       </Link>
       <PageHeader title={p.name} subtitle={p.code} />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Stat label={t("ownership.activeCount")} value={summary.data?.counts.active ?? 0} />
         <Stat label={t("ownership.expiredCount")} value={summary.data?.counts.expired ?? 0} />
         <Stat label={t("ownership.transferredCount")} value={summary.data?.counts.transferred ?? 0} />
+        <Stat label={t("ownership.returnedCount")} value={summary.data?.counts.returnedToCompany ?? 0} />
         <Stat label={t("ownership.totalCount")} value={summary.data?.counts.total ?? 0} />
       </div>
 
@@ -86,17 +87,27 @@ export function PartnerDetailPage() {
           </thead>
           <tbody>
             {summary.data?.owned.length === 0 && <tr><td colSpan={4} className="text-center text-muted py-6">{t("common.noData")}</td></tr>}
-            {summary.data?.owned.map((o) => (
-              <tr key={o.id}>
-                <td>
-                  <Link to={`/customers/${o.customerId}`} className="font-medium hover:text-violet-700">{o.customerName}</Link>
-                  <div className="text-xs text-muted font-mono">{o.taxCardNumber}</div>
-                </td>
-                <td className="text-xs">{new Date(o.startDate).toLocaleDateString()}</td>
-                <td className="text-xs">{new Date(o.endDate).toLocaleDateString()}</td>
-                <td><span className={statusPill(o.status)}>{t(`ownership.statuses.${o.status}`)}</span></td>
-              </tr>
-            ))}
+            {summary.data?.owned.map((o) => {
+              const eligible = o.status === "active" || o.status === "extended";
+              return (
+                <tr key={o.id}>
+                  <td>
+                    <Link to={`/customers/${o.customerId}`} className="font-medium hover:text-violet-700">{o.customerName}</Link>
+                    <div className="text-xs text-muted font-mono">{o.taxCardNumber}</div>
+                  </td>
+                  <td className="text-xs">{new Date(o.startDate).toLocaleDateString()}</td>
+                  <td className="text-xs">{new Date(o.endDate).toLocaleDateString()}</td>
+                  <td>
+                    <span className={statusPill(o.status)}>{t(`ownership.statuses.${o.status}`)}</span>
+                    <div className="text-xs mt-1">
+                      <span className={eligible ? "pill-success" : "pill-muted"}>
+                        {eligible ? t("ownership.commissionEligible") : t("ownership.commissionNotEligible")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

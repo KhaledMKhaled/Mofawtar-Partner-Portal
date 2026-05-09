@@ -9,6 +9,7 @@ import {
   packages,
   users,
   requestStatusHistory,
+  requestReassignments,
   auditLog,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
@@ -132,6 +133,24 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     .orderBy(desc(requestStatusHistory.createdAt))
     .limit(200);
 
+  const reassignments = await db
+    .select({
+      id: requestReassignments.id,
+      requestId: requestReassignments.requestId,
+      fromSalesUserId: requestReassignments.fromSalesUserId,
+      toSalesUserId: requestReassignments.toSalesUserId,
+      reason: requestReassignments.reason,
+      createdAt: requestReassignments.createdAt,
+      byUserName: users.name,
+    })
+    .from(requestReassignments)
+    .leftJoin(users, eq(users.id, requestReassignments.byUserId))
+    .where(
+      sql`${requestReassignments.requestId} IN (SELECT id FROM requests WHERE customer_id = ${id})`,
+    )
+    .orderBy(desc(requestReassignments.createdAt))
+    .limit(100);
+
   const auditRows = await db
     .select({
       id: auditLog.id,
@@ -152,6 +171,7 @@ customersRouter.get("/:id", requirePerm("customers:view"), async (req, res) => {
     ownership: owners,
     requests: reqs,
     timeline,
+    reassignments,
     audit: auditRows,
   });
 });

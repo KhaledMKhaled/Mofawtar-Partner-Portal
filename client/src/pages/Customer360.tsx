@@ -49,6 +49,15 @@ interface Customer360 {
     createdAt: string;
     userName: string | null;
   }[];
+  reassignments: {
+    id: number;
+    requestId: number;
+    fromSalesUserId: number | null;
+    toSalesUserId: number;
+    reason: string | null;
+    createdAt: string;
+    byUserName: string | null;
+  }[];
   audit: { id: number; action: string; createdAt: string; note: string | null; userName: string | null }[];
 }
 
@@ -64,7 +73,14 @@ export function Customer360Page() {
 
   if (q.isLoading) return <div className="text-muted">{t("common.loading")}</div>;
   if (!q.data) return <div className="text-muted">{t("common.noData")}</div>;
-  const { customer, currentOwner, ownership, requests, timeline, audit } = q.data;
+  const { customer, currentOwner, ownership, requests, timeline, reassignments, audit } = q.data;
+  type Event =
+    | { kind: "status"; id: number; createdAt: string; requestId: number; fromStatus: string | null; toStatus: string; userName: string | null; reason: string | null }
+    | { kind: "reassign"; id: number; createdAt: string; requestId: number; fromSalesUserId: number | null; toSalesUserId: number; userName: string | null; reason: string | null };
+  const events: Event[] = [
+    ...timeline.map((e) => ({ kind: "status" as const, ...e })),
+    ...reassignments.map((r) => ({ kind: "reassign" as const, id: r.id, createdAt: r.createdAt, requestId: r.requestId, fromSalesUserId: r.fromSalesUserId, toSalesUserId: r.toSalesUserId, userName: r.byUserName, reason: r.reason })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div>
@@ -150,15 +166,22 @@ export function Customer360Page() {
         <div className="stamp-card p-5">
           <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("requests.timeline")}</h3>
           <ul className="space-y-3 text-sm">
-            {timeline.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
-            {timeline.map((e) => (
-              <li key={e.id} className="border-s-2 border-violet-200 ps-3">
+            {events.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
+            {events.map((e) => (
+              <li key={`${e.kind}-${e.id}`} className="border-s-2 border-violet-200 ps-3">
                 <div className="text-xs text-muted">{new Date(e.createdAt).toLocaleString(isAr ? "ar" : "en")}</div>
-                <div>
-                  <span className="font-medium">SR #{e.requestId}</span>{" "}
-                  {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
-                  {t(`requests.statuses.${e.toStatus}`)}
-                </div>
+                {e.kind === "status" ? (
+                  <div>
+                    <span className="font-medium">SR #{e.requestId}</span>{" "}
+                    {e.fromStatus ? `${t(`requests.statuses.${e.fromStatus}`)} → ` : ""}
+                    {t(`requests.statuses.${e.toStatus}`)}
+                  </div>
+                ) : (
+                  <div>
+                    <span className="font-medium">SR #{e.requestId}</span>{" "}
+                    <span className="pill-violet">{t("requests.reassigned")}</span>
+                  </div>
+                )}
                 {e.userName && <div className="text-xs text-muted">{e.userName}</div>}
                 {e.reason && <div className="text-xs italic">{e.reason}</div>}
               </li>

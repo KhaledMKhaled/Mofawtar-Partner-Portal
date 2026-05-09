@@ -465,6 +465,17 @@ requestsRouter.get("/", requirePerm("requests:view"), async (req, res) => {
   if (req.query.salesUserId) filters.push(eq(requests.salesUserId, Number(req.query.salesUserId)));
   if (req.query.packageId) filters.push(eq(requests.packageId, Number(req.query.packageId)));
   if (req.query.operationType) filters.push(eq(requests.operationType, String(req.query.operationType)));
+  if (req.query.fromDate) {
+    const d = new Date(String(req.query.fromDate));
+    if (!Number.isNaN(d.getTime())) filters.push(sql`${requests.createdAt} >= ${d}`);
+  }
+  if (req.query.toDate) {
+    const d = new Date(String(req.query.toDate));
+    if (!Number.isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999);
+      filters.push(sql`${requests.createdAt} <= ${d}`);
+    }
+  }
   if (req.query.q) {
     const q = `%${String(req.query.q)}%`;
     filters.push(or(
@@ -516,6 +527,12 @@ requestsRouter.get("/", requirePerm("requests:view"), async (req, res) => {
     ? await baseQuery.where(where).orderBy(desc(requests.createdAt)).limit(500)
     : await baseQuery.orderBy(desc(requests.createdAt)).limit(500);
   res.json(rows);
+});
+
+// ---------- Operation types (i18n list) ----------
+// Defined before `/:id` so the static path is not captured by the param.
+requestsRouter.get("/meta/operation-types", requirePerm("requests:view"), (_req, res) => {
+  res.json(OPERATION_TYPES as readonly OperationType[]);
 });
 
 // ---------- Detail ----------
@@ -758,10 +775,5 @@ requestsRouter.post("/:id/reassign", requirePerm("requests:reassign"), async (re
   });
   await notifyRequestStatus(id, "request.reassigned", old.partnerId, old.customerId);
   res.json(updated);
-});
 
-// ---------- Operation types (i18n list) ----------
-
-requestsRouter.get("/meta/operation-types", requirePerm("requests:view"), (_req, res) => {
-  res.json(OPERATION_TYPES as readonly OperationType[]);
 });
