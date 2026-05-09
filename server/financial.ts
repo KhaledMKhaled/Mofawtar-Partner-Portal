@@ -684,7 +684,11 @@ export async function createSettlement(opts: {
   }
 
   const finalAmount = netDue - partnerTotal;
-  const direction = finalAmount >= 0 ? "partner_to_company" : "company_to_partner";
+  const direction = finalAmount === 0
+    ? "balanced"
+    : finalAmount > 0
+      ? "partner_to_company"
+      : "company_to_partner";
   const settlementNumber = `STL-${Date.now()}-${opts.partnerId}`;
   const [settlement] = await db
     .insert(settlements)

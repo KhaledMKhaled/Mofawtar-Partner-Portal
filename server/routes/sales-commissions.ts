@@ -71,6 +71,18 @@ salesCommissionsRouter.get("/:id", requirePerm("sales_commissions:view"), async 
   const [sc] = await db.select().from(salesCommissions).where(eq(salesCommissions.id, id));
   if (!sc) return res.status(404).json({ error: "not_found" });
   if (cu.roleKey === "sales" && sc.salesUserId !== cu.id) return res.status(403).json({ error: "forbidden" });
+  if (cu.roleKey === "team_leader") {
+    // Team leaders may only see commissions for sales reps assigned to
+    // them. Mirrors the list-view scoping so the detail endpoint isn't
+    // a back-door (IDOR) into other teams' commission rows.
+    if (sc.salesUserId === cu.id) {
+      // ok — own
+    } else {
+      const owned = await db.execute(sql`SELECT 1 FROM team_assignments WHERE team_leader_id = ${cu.id} AND sales_user_id = ${sc.salesUserId} LIMIT 1`);
+      const rows = (owned as unknown as { rows: unknown[] }).rows ?? (owned as unknown as unknown[]);
+      if (!rows || rows.length === 0) return res.status(403).json({ error: "forbidden" });
+    }
+  }
   if (partnerScoped(cu) && sc.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
   const history = await db
     .select({

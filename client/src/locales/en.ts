@@ -450,6 +450,7 @@ export const en = {
     partnerIdFilter: "Partner ID",
     customerIdFilter: "Customer ID",
     requestIdFilter: "SR ID",
+    userIdFilter: "User ID",
   },
   excelImport: {
     title: "Excel import",

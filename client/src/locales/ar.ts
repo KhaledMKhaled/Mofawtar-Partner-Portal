@@ -452,6 +452,7 @@ export const ar: Translations = {
     partnerIdFilter: "معرّف الشريك",
     customerIdFilter: "معرّف العميل",
     requestIdFilter: "معرّف الطلب",
+    userIdFilter: "معرّف المستخدم",
   },
   excelImport: {
     title: "استيراد إكسل",
