@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   index,
   primaryKey,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 
 export const partners = pgTable("partners", {
@@ -333,15 +334,25 @@ export const orderPayments = pgTable(
   })
 );
 
-export const orderPaymentStatusHistory = pgTable("order_payment_status_history", {
-  id: serial("id").primaryKey(),
-  orderPaymentId: integer("order_payment_id").notNull().references(() => orderPayments.id, { onDelete: "cascade" }),
-  fromStatus: varchar("from_status", { length: 40 }),
-  toStatus: varchar("to_status", { length: 40 }).notNull(),
-  reason: text("reason"),
-  changedByUserId: integer("changed_by_user_id"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const orderPaymentStatusHistory = pgTable(
+  "order_payment_status_history",
+  {
+    id: serial("id").primaryKey(),
+    orderPaymentId: integer("order_payment_id").notNull(),
+    fromStatus: varchar("from_status", { length: 40 }),
+    toStatus: varchar("to_status", { length: 40 }).notNull(),
+    reason: text("reason"),
+    changedByUserId: integer("changed_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    opFk: foreignKey({
+      name: "opsh_order_payment_id_fk",
+      columns: [t.orderPaymentId],
+      foreignColumns: [orderPayments.id],
+    }).onDelete("cascade"),
+  })
+);
 
 export const partnerCommissions = pgTable(
   "partner_commissions",
@@ -370,15 +381,25 @@ export const partnerCommissions = pgTable(
   })
 );
 
-export const partnerCommissionStatusHistory = pgTable("partner_commission_status_history", {
-  id: serial("id").primaryKey(),
-  partnerCommissionId: integer("partner_commission_id").notNull().references(() => partnerCommissions.id, { onDelete: "cascade" }),
-  fromStatus: varchar("from_status", { length: 40 }),
-  toStatus: varchar("to_status", { length: 40 }).notNull(),
-  reason: text("reason"),
-  changedByUserId: integer("changed_by_user_id"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const partnerCommissionStatusHistory = pgTable(
+  "partner_commission_status_history",
+  {
+    id: serial("id").primaryKey(),
+    partnerCommissionId: integer("partner_commission_id").notNull(),
+    fromStatus: varchar("from_status", { length: 40 }),
+    toStatus: varchar("to_status", { length: 40 }).notNull(),
+    reason: text("reason"),
+    changedByUserId: integer("changed_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pcFk: foreignKey({
+      name: "pcsh_partner_commission_id_fk",
+      columns: [t.partnerCommissionId],
+      foreignColumns: [partnerCommissions.id],
+    }).onDelete("cascade"),
+  })
+);
 
 export const salesCommissions = pgTable(
   "sales_commissions",
@@ -407,15 +428,25 @@ export const salesCommissions = pgTable(
   })
 );
 
-export const salesCommissionStatusHistory = pgTable("sales_commission_status_history", {
-  id: serial("id").primaryKey(),
-  salesCommissionId: integer("sales_commission_id").notNull().references(() => salesCommissions.id, { onDelete: "cascade" }),
-  fromStatus: varchar("from_status", { length: 40 }),
-  toStatus: varchar("to_status", { length: 40 }).notNull(),
-  reason: text("reason"),
-  changedByUserId: integer("changed_by_user_id"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const salesCommissionStatusHistory = pgTable(
+  "sales_commission_status_history",
+  {
+    id: serial("id").primaryKey(),
+    salesCommissionId: integer("sales_commission_id").notNull(),
+    fromStatus: varchar("from_status", { length: 40 }),
+    toStatus: varchar("to_status", { length: 40 }).notNull(),
+    reason: text("reason"),
+    changedByUserId: integer("changed_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    scFk: foreignKey({
+      name: "scsh_sales_commission_id_fk",
+      columns: [t.salesCommissionId],
+      foreignColumns: [salesCommissions.id],
+    }).onDelete("cascade"),
+  })
+);
 
 export const claims = pgTable(
   "claims",

@@ -1,0 +1,428 @@
+~/workspace$ npm run db:push
+
+> mofawter-partner-portal@0.1.0 db:push
+> drizzle-kit push
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/home/runner/workspace/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+· You're about to add roles_key_unique unique constraint to the table, which contains 6 items. If this statement fails, you will receive an error from the database. Do you want to truncate roles table?
+
+
+ Warning  You are about to execute current statements:
+
+ALTER TABLE "roles" DROP CONSTRAINT "roles_key_key";
+ALTER TABLE "requests" DROP CONSTRAINT "requests_sr_number_key";
+ALTER TABLE "payout_batches" DROP CONSTRAINT "payout_batches_batch_number_key";
+ALTER TABLE "settlements" DROP CONSTRAINT "settlements_settlement_number_key";
+ALTER TABLE "claims" DROP CONSTRAINT "claims_claim_number_key";
+ALTER TABLE "customers" DROP CONSTRAINT "customers_tax_card_number_key";
+ALTER TABLE "password_resets" DROP CONSTRAINT "password_resets_token_key";
+ALTER TABLE "partners" DROP CONSTRAINT "partners_code_key";
+ALTER TABLE "users" DROP CONSTRAINT "users_partner_id_fkey";
+
+ALTER TABLE "users" DROP CONSTRAINT "users_role_id_fkey";
+
+ALTER TABLE "audit_log" DROP CONSTRAINT "audit_log_user_id_fkey";
+
+ALTER TABLE "requests" DROP CONSTRAINT "requests_customer_id_fkey";
+
+ALTER TABLE "requests" DROP CONSTRAINT "requests_package_id_fkey";
+
+ALTER TABLE "requests" DROP CONSTRAINT "requests_partner_id_fkey";
+
+ALTER TABLE "requests" DROP CONSTRAINT "requests_sales_user_id_fkey";
+
+ALTER TABLE "requests" DROP CONSTRAINT "requests_team_leader_id_fkey";
+
+ALTER TABLE "request_status_history" DROP CONSTRAINT "request_status_history_request_id_fkey";
+
+ALTER TABLE "request_reassignments" DROP CONSTRAINT "request_reassignments_request_id_fkey";
+
+ALTER TABLE "order_payments" DROP CONSTRAINT "order_payments_customer_id_fkey";
+
+ALTER TABLE "order_payments" DROP CONSTRAINT "order_payments_package_id_fkey";
+
+ALTER TABLE "order_payments" DROP CONSTRAINT "order_payments_partner_id_fkey";
+
+ALTER TABLE "order_payments" DROP CONSTRAINT "order_payments_request_id_fkey";
+
+ALTER TABLE "partner_commission_status_history" DROP CONSTRAINT "partner_commission_status_history_partner_commission_id_fkey";
+
+ALTER TABLE "payout_batch_items" DROP CONSTRAINT "payout_batch_items_payout_batch_id_fkey";
+
+ALTER TABLE "payout_batch_items" DROP CONSTRAINT "payout_batch_items_sales_commission_id_fkey";
+
+ALTER TABLE "claim_items" DROP CONSTRAINT "claim_items_claim_id_fkey";
+
+ALTER TABLE "claim_items" DROP CONSTRAINT "claim_items_partner_commission_id_fkey";
+
+ALTER TABLE "sales_commission_status_history" DROP CONSTRAINT "sales_commission_status_history_sales_commission_id_fkey";
+
+ALTER TABLE "payout_batches" DROP CONSTRAINT "payout_batches_partner_id_fkey";
+
+ALTER TABLE "order_payment_status_history" DROP CONSTRAINT "order_payment_status_history_order_payment_id_fkey";
+
+ALTER TABLE "settlements" DROP CONSTRAINT "settlements_claim_id_fkey";
+
+ALTER TABLE "settlements" DROP CONSTRAINT "settlements_partner_id_fkey";
+
+ALTER TABLE "claims" DROP CONSTRAINT "claims_partner_id_fkey";
+
+ALTER TABLE "partner_commissions" DROP CONSTRAINT "partner_commissions_customer_id_fkey";
+
+ALTER TABLE "partner_commissions" DROP CONSTRAINT "partner_commissions_order_payment_id_fkey";
+
+ALTER TABLE "partner_commissions" DROP CONSTRAINT "partner_commissions_package_id_fkey";
+
+ALTER TABLE "partner_commissions" DROP CONSTRAINT "partner_commissions_partner_id_fkey";
+
+ALTER TABLE "partner_commissions" DROP CONSTRAINT "partner_commissions_request_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_customer_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_order_payment_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_package_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_partner_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_request_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_sales_user_id_fkey";
+
+ALTER TABLE "sales_commissions" DROP CONSTRAINT "sales_commissions_team_leader_id_fkey";
+
+ALTER TABLE "customer_ownership" DROP CONSTRAINT "customer_ownership_customer_id_fkey";
+
+ALTER TABLE "customer_ownership" DROP CONSTRAINT "customer_ownership_partner_id_fkey";
+
+ALTER TABLE "notifications" DROP CONSTRAINT "notifications_user_id_fkey";
+
+ALTER TABLE "password_resets" DROP CONSTRAINT "password_resets_user_id_fkey";
+
+ALTER TABLE "commission_rules" DROP CONSTRAINT "commission_rules_package_id_fkey";
+
+ALTER TABLE "commission_rules" DROP CONSTRAINT "commission_rules_partner_id_fkey";
+
+ALTER TABLE "package_partners" DROP CONSTRAINT "package_partners_package_id_fkey";
+
+ALTER TABLE "package_partners" DROP CONSTRAINT "package_partners_partner_id_fkey";
+
+ALTER TABLE "team_assignments" DROP CONSTRAINT "team_assignments_partner_id_fkey";
+
+ALTER TABLE "team_assignments" DROP CONSTRAINT "team_assignments_sales_user_id_fkey";
+
+ALTER TABLE "team_assignments" DROP CONSTRAINT "team_assignments_team_leader_id_fkey";
+
+DROP INDEX IF EXISTS "order_payments_request_uniq";
+DROP INDEX IF EXISTS "payout_batch_items_sc_uniq";
+DROP INDEX IF EXISTS "claim_items_pc_uniq";
+DROP INDEX IF EXISTS "partner_commissions_request_uniq";
+DROP INDEX IF EXISTS "sales_commissions_request_uniq";
+DROP INDEX IF EXISTS "team_assignments_partner_idx";
+DROP INDEX IF EXISTS "team_assignments_sales_idx";
+ALTER TABLE "package_partners" DROP CONSTRAINT "package_partners_pkey";
+ALTER TABLE "team_assignments" DROP CONSTRAINT "team_assignments_pkey";
+ALTER TABLE "package_partners" ADD CONSTRAINT "package_partners_package_id_partner_id_pk" PRIMARY KEY("package_id","partner_id");
+ALTER TABLE "team_assignments" ADD CONSTRAINT "team_assignments_team_leader_id_sales_user_id_pk" PRIMARY KEY("team_leader_id","sales_user_id");
+DO $$ BEGIN
+ ALTER TABLE "users" ADD CONSTRAINT "users_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "users" ADD CONSTRAINT "users_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "requests" ADD CONSTRAINT "requests_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "requests" ADD CONSTRAINT "requests_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "requests" ADD CONSTRAINT "requests_sales_user_id_users_id_fk" FOREIGN KEY ("sales_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "requests" ADD CONSTRAINT "requests_team_leader_id_users_id_fk" FOREIGN KEY ("team_leader_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "requests" ADD CONSTRAINT "requests_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "request_status_history" ADD CONSTRAINT "request_status_history_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "request_reassignments" ADD CONSTRAINT "request_reassignments_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "order_payments" ADD CONSTRAINT "order_payments_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "order_payments" ADD CONSTRAINT "order_payments_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "order_payments" ADD CONSTRAINT "order_payments_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "order_payments" ADD CONSTRAINT "order_payments_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commission_status_history" ADD CONSTRAINT "partner_commission_status_history_partner_commission_id_partner_commissions_id_fk" FOREIGN KEY ("partner_commission_id") REFERENCES "public"."partner_commissions"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "payout_batch_items" ADD CONSTRAINT "payout_batch_items_payout_batch_id_payout_batches_id_fk" FOREIGN KEY ("payout_batch_id") REFERENCES "public"."payout_batches"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "payout_batch_items" ADD CONSTRAINT "payout_batch_items_sales_commission_id_sales_commissions_id_fk" FOREIGN KEY ("sales_commission_id") REFERENCES "public"."sales_commissions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "claim_items" ADD CONSTRAINT "claim_items_claim_id_claims_id_fk" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "claim_items" ADD CONSTRAINT "claim_items_partner_commission_id_partner_commissions_id_fk" FOREIGN KEY ("partner_commission_id") REFERENCES "public"."partner_commissions"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commission_status_history" ADD CONSTRAINT "sales_commission_status_history_sales_commission_id_sales_commissions_id_fk" FOREIGN KEY ("sales_commission_id") REFERENCES "public"."sales_commissions"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "payout_batches" ADD CONSTRAINT "payout_batches_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "order_payment_status_history" ADD CONSTRAINT "order_payment_status_history_order_payment_id_order_payments_id_fk" FOREIGN KEY ("order_payment_id") REFERENCES "public"."order_payments"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "settlements" ADD CONSTRAINT "settlements_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "settlements" ADD CONSTRAINT "settlements_claim_id_claims_id_fk" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "claims" ADD CONSTRAINT "claims_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_order_payment_id_order_payments_id_fk" FOREIGN KEY ("order_payment_id") REFERENCES "public"."order_payments"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_request_id_requests_id_fk" FOREIGN KEY ("request_id") REFERENCES "public"."requests"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_order_payment_id_order_payments_id_fk" FOREIGN KEY ("order_payment_id") REFERENCES "public"."order_payments"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_sales_user_id_users_id_fk" FOREIGN KEY ("sales_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_team_leader_id_users_id_fk" FOREIGN KEY ("team_leader_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "sales_commissions" ADD CONSTRAINT "sales_commissions_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "customer_ownership" ADD CONSTRAINT "customer_ownership_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "customer_ownership" ADD CONSTRAINT "customer_ownership_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "password_resets" ADD CONSTRAINT "password_resets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "commission_rules" ADD CONSTRAINT "commission_rules_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "commission_rules" ADD CONSTRAINT "commission_rules_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "package_partners" ADD CONSTRAINT "package_partners_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "package_partners" ADD CONSTRAINT "package_partners_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "team_assignments" ADD CONSTRAINT "team_assignments_team_leader_id_users_id_fk" FOREIGN KEY ("team_leader_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "team_assignments" ADD CONSTRAINT "team_assignments_sales_user_id_users_id_fk" FOREIGN KEY ("sales_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+ ALTER TABLE "team_assignments" ADD CONSTRAINT "team_assignments_partner_id_partners_id_fk" FOREIGN KEY ("partner_id") REFERENCES "public"."partners"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TABLE "roles" ADD CONSTRAINT "roles_key_unique" UNIQUE("key");
+ALTER TABLE "requests" ADD CONSTRAINT "requests_sr_number_unique" UNIQUE("sr_number");
+ALTER TABLE "payout_batches" ADD CONSTRAINT "payout_batches_batch_number_unique" UNIQUE("batch_number");
+ALTER TABLE "settlements" ADD CONSTRAINT "settlements_settlement_number_unique" UNIQUE("settlement_number");
+ALTER TABLE "claims" ADD CONSTRAINT "claims_claim_number_unique" UNIQUE("claim_number");
+ALTER TABLE "customers" ADD CONSTRAINT "customers_tax_card_number_unique" UNIQUE("tax_card_number");
+ALTER TABLE "password_resets" ADD CONSTRAINT "password_resets_token_unique" UNIQUE("token");
+ALTER TABLE "partners" ADD CONSTRAINT "partners_code_unique" UNIQUE("code");
+
+❯ No, abort
+  Yes, I want to execute all statements
