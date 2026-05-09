@@ -7,6 +7,7 @@ import {
   integer,
   numeric,
   timestamp,
+  json,
   jsonb,
   uniqueIndex,
   index,
@@ -163,11 +164,15 @@ export const auditLog = pgTable(
   (t) => ({ actionIdx: index("audit_log_action_idx").on(t.action) })
 );
 
-export const sessions = pgTable("session", {
-  sid: varchar("sid").primaryKey(),
-  sess: jsonb("sess").notNull(),
-  expire: timestamp("expire", { precision: 6 }).notNull(),
-});
+export const sessions = pgTable(
+  "session",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: json("sess").notNull(),
+    expire: timestamp("expire", { precision: 6 }).notNull(),
+  },
+  (t) => ({ expireIdx: index("IDX_session_expire").on(t.expire) })
+);
 
 export const customers = pgTable(
   "customers",
