@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import * as XLSX from "xlsx";
 import { db } from "../db.js";
 import { customers, packages, requests, orderPayments, partnerCommissions, salesCommissions } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
@@ -14,10 +15,89 @@ import { transitionOrderPayment, transitionPartnerCommission, transitionSalesCom
 
 export const excelImportRouter = Router();
 
-const importInput = z.object({
-  entity: z.enum(["customers", "packages", "requests", "order_payments", "partner_commissions", "sales_commissions"]),
-  rows: z.array(z.record(z.unknown())).min(1).max(2000),
+const ENTITIES = ["customers", "packages", "requests", "order_payments", "partner_commissions", "sales_commissions"] as const;
+type Entity = (typeof ENTITIES)[number];
+
+const TEMPLATE_HEADERS: Record<Entity, string[]> = {
+  customers: ["taxCardNumber", "name", "contactPerson", "contactPhone", "email", "address", "taxOffice", "businessActivity"],
+  packages: ["id", "name", "itemPriceBeforeTax", "taxPct", "finalPriceAfterTax", "durationDays", "active"],
+  requests: ["id", "status"],
+  order_payments: ["id", "status"],
+  partner_commissions: ["id", "status"],
+  sales_commissions: ["id", "status"],
+};
+
+// Step 1 of the 3-step Upload → Preview/Validate → Confirm flow:
+// the client downloads a per-entity template so column names always match.
+excelImportRouter.get("/template/:entity", requirePerm("excel_import:import"), (req, res) => {
+  const entity = req.params.entity as Entity;
+  if (!ENTITIES.includes(entity)) return res.status(400).json({ error: "invalid_entity" });
+  const headers = TEMPLATE_HEADERS[entity];
+  const ws = XLSX.utils.aoa_to_sheet([headers]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, entity);
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${entity}-template.xlsx"`);
+  res.send(buf);
 });
+
+const importInput = z.object({
+  entity: z.enum(ENTITIES),
+  rows: z.array(z.record(z.unknown())).min(1).max(2000),
+  dryRun: z.boolean().optional(),
+});
+
+// Step 2 of the wizard: preview/validate without writing. Mirrors the same
+// row-by-row checks the confirm step uses, so the user sees the exact same
+// error taxonomy before they commit.
+excelImportRouter.post("/validate", requirePerm("excel_import:import"), async (req, res) => {
+  const cu = getUser(req)!;
+  if (cu.roleKey !== "company_super_admin") return res.status(403).json({ error: "forbidden" });
+  const parsed = importInput.safeParse({ ...req.body, dryRun: true });
+  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
+  const { ok, failures } = await validateRows(parsed.data.entity, parsed.data.rows);
+  res.json({ valid: failures.length === 0, totalRows: parsed.data.rows.length, okRows: ok, failures });
+});
+
+async function validateRows(entity: Entity, rows: Array<Record<string, unknown>>): Promise<{ ok: number; failures: Array<{ row: number; error: string }> }> {
+  let ok = 0;
+  const failures: Array<{ row: number; error: string }> = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const rowNum = i + 2;
+    let err: string | null = null;
+    if (entity === "customers") {
+      const tax = String(r.taxCardNumber ?? r.tax_card_number ?? "").trim();
+      if (!tax) err = "missing_tax_card";
+      else {
+        const [existing] = await db.select().from(customers).where(eq(customers.taxCardNumber, tax));
+        if (!existing) err = "not_found";
+      }
+    } else if (entity === "packages") {
+      const id = Number(r.id);
+      if (!id) err = "missing_id";
+      else {
+        const [existing] = await db.select().from(packages).where(eq(packages.id, id));
+        if (!existing) err = "not_found";
+      }
+    } else if (entity === "requests" || entity === "order_payments" || entity === "partner_commissions" || entity === "sales_commissions") {
+      const id = Number(r.id);
+      const toStatus = String(r.status ?? r.toStatus ?? "").trim();
+      if (!id || !toStatus) err = "missing_id_or_status";
+      else {
+        const allowedStatuses: readonly string[] =
+          entity === "requests" ? REQUEST_STATUSES :
+          entity === "order_payments" ? ORDER_PAYMENT_STATUSES :
+          entity === "partner_commissions" ? PARTNER_COMMISSION_STATUSES :
+          SALES_COMMISSION_STATUSES;
+        if (!allowedStatuses.includes(toStatus)) err = "invalid_status";
+      }
+    }
+    if (err) failures.push({ row: rowNum, error: err }); else ok++;
+  }
+  return { ok, failures };
+}
 
 excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res) => {
   const cu = getUser(req)!;

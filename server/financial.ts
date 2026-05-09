@@ -65,19 +65,22 @@ export async function resolveCommissionRates(
     )
     .limit(1);
 
+  // Spec precedence: special rule (per partner+package+operation) -> partner
+  // default -> none. Package defaults are intentionally NOT consulted here.
   let partnerPct: number;
   let salesPct: number;
   if (rule) {
     partnerPct = Number(rule.partnerCommissionPct);
     salesPct = Number(rule.salesCommissionPct);
-  } else if (pkg && (Number(pkg.defaultPartnerCommissionPct) > 0 || Number(pkg.defaultSalesCommissionPct) > 0)) {
-    partnerPct = Number(pkg.defaultPartnerCommissionPct);
-    salesPct = Number(pkg.defaultSalesCommissionPct);
+  } else if (partner) {
+    partnerPct = Number(partner.partnerCommissionPct ?? 0);
+    salesPct = partner.salesCommissionEnabled ? Number(partner.salesCommissionPct ?? 0) : 0;
   } else {
-    partnerPct = Number(partner?.partnerCommissionPct ?? 0);
-    salesPct = partner?.salesCommissionEnabled ? Number(partner?.salesCommissionPct ?? 0) : 0;
+    partnerPct = 0;
+    salesPct = 0;
   }
   if (!partner?.salesCommissionEnabled) salesPct = 0;
+  void pkg;
   return { partnerPct, salesPct };
 }
 
@@ -405,7 +408,7 @@ export async function runFinancialHousekeep(): Promise<{ flipped: number; claims
   // multiple instances or overlapping intervals from double-creating claims.
   const lockKey = 0x4d50503301; // "MPP" + 0x01
   const got = await db.execute(sql`SELECT pg_try_advisory_lock(${lockKey}) AS ok`);
-  const ok = (got as any).rows?.[0]?.ok;
+  const ok = (got as unknown as { rows: Array<{ ok: boolean }> }).rows?.[0]?.ok;
   if (!ok) return { flipped: 0, claimsCreated: 0 };
   try {
   const now = new Date();

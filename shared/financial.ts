@@ -17,7 +17,7 @@ export const ORDER_PAYMENT_TRANSITIONS: Record<OrderPaymentStatus, OrderPaymentS
   collected_by_sales: ["held_by_partner", "refunded", "cancelled"],
   held_by_partner: ["net_amount_due_to_company", "refunded", "cancelled"],
   net_amount_due_to_company: ["received_by_company", "refunded", "cancelled"],
-  received_by_company: ["settled", "refunded"],
+  received_by_company: ["settled", "refunded", "cancelled"],
   settled: [],
   refunded: [],
   cancelled: [],

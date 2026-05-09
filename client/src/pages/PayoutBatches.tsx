@@ -60,7 +60,7 @@ export function PayoutBatchesPage() {
             </div>
             <div>
               <label className="text-xs text-muted block mb-1">{t("payoutBatches.cycle")}</label>
-              <select className="input" value={cycle} onChange={(e) => setCycle(e.target.value as any)}>
+              <select className="input" value={cycle} onChange={(e) => setCycle(e.target.value as typeof cycle)}>
                 <option value="monthly">{t("partners.monthly")}</option>
                 <option value="quarterly">{t("partners.quarterly")}</option>
               </select>

@@ -213,7 +213,7 @@ reportsRouter.get("/:key/export.pdf", requirePerm("reports:export"), async (req,
   // Render a minimal printable HTML — clients can use the browser's "Save as PDF".
   const esc = (v: unknown) => String(v ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
   const head = data.headers.map((h) => `<th>${esc(h)}</th>`).join("");
-  const body = data.rows.map((r) => `<tr>${data.headers.map((h) => `<td>${esc((r as any)[h])}</td>`).join("")}</tr>`).join("");
+  const body = data.rows.map((r) => `<tr>${data.headers.map((h) => `<td>${esc((r as Record<string, unknown>)[h])}</td>`).join("")}</tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${key}</title>
 <style>
   body{font-family:Inter,Arial,sans-serif;color:#0F1115;padding:24px}
@@ -235,7 +235,11 @@ reportsRouter.get("/:key/export.pdf", requirePerm("reports:export"), async (req,
 });
 
 // Aggregate KPIs for the dashboard, role-tailored.
-reportsRouter.get("/dashboard/kpis", requirePerm("reports:view"), async (req, res) => {
+// Dashboard KPIs are visible to every authenticated user; the response is
+// role-tailored server-side so each role only sees cards they have permission
+// to act on.
+reportsRouter.get("/dashboard/kpis", async (req, res) => {
+  if (!getUser(req)) return res.status(401).json({ error: "unauthorized" });
   const cu = getUser(req)!;
   const scoped = partnerScoped(cu);
   const partnerFilter = scoped ? sql`partner_id = ${cu.partnerId}` : sql`TRUE`;
