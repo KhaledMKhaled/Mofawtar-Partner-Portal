@@ -576,10 +576,12 @@ export function RequestWizard({
                   }}
                   dir="ltr"
                 >
-                  <div style={{ fontSize: "16px", fontWeight: 800, textAlign: "center", letterSpacing: "0.05em" }}>
-                    MOFAWTER
+                  <div style={{ fontSize: "16px", fontWeight: 800, textAlign: "center", letterSpacing: "0.03em" }}>
+                    {partnerName}
                   </div>
-                  <div style={{ textAlign: "center", fontSize: "10px" }}>{partnerName}</div>
+                  <div style={{ textAlign: "center", fontSize: "10px", letterSpacing: "0.05em", opacity: 0.85 }}>
+                    Mofawter
+                  </div>
                   <Sep />
                   <Row label="SR #" value={draft.request.srNumber} bold />
                   <Row label="Date" value={new Date().toLocaleString("en-GB")} small />
