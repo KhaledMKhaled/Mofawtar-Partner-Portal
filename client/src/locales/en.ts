@@ -435,6 +435,8 @@ export const en = {
     anyEntity: "Any entity",
     actionFilter: "Action contains…",
     partnerIdFilter: "Partner ID",
+    customerIdFilter: "Customer ID",
+    requestIdFilter: "SR ID",
   },
   excelImport: {
     title: "Excel import",

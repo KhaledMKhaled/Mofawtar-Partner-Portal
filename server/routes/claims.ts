@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
@@ -17,7 +17,7 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
 claimsRouter.get("/", requirePerm("claims:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { status, partnerId, from, to } = req.query as Record<string, string | undefined>;
-  const filters: any[] = [];
+  const filters: SQL[] = [];
   if (partnerScoped(cu)) filters.push(eq(claims.partnerId, cu.partnerId!));
   else if (partnerId) filters.push(eq(claims.partnerId, Number(partnerId)));
   if (status) filters.push(eq(claims.status, status));
@@ -112,8 +112,9 @@ claimsRouter.post("/", requirePerm("claims:create"), async (req, res) => {
       notes: parsed.data.notes,
     });
     res.json(result);
-  } catch (e: any) {
-    res.status(400).json({ error: e.message ?? "failed" });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ error: msg || "failed" });
   }
 });
 
@@ -123,8 +124,9 @@ claimsRouter.post("/:id/approve", requirePerm("claims:approve"), async (req, res
   try {
     await approveClaim(Number(req.params.id), cu.id);
     res.json({ ok: true });
-  } catch (e: any) {
-    res.status(409).json({ error: e.message });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(409).json({ error: msg });
   }
 });
 
@@ -137,7 +139,8 @@ claimsRouter.post("/:id/reject", requirePerm("claims:reject"), async (req, res) 
   try {
     await rejectClaim(Number(req.params.id), cu.id, parsed.data.reason);
     res.json({ ok: true });
-  } catch (e: any) {
-    res.status(409).json({ error: e.message });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(409).json({ error: msg });
   }
 });

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
@@ -18,7 +18,7 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
 salesCommissionsRouter.get("/", requirePerm("sales_commissions:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { status, partnerId, salesUserId, from, to } = req.query as Record<string, string | undefined>;
-  const filters: any[] = [];
+  const filters: SQL[] = [];
   if (cu.roleKey === "sales") {
     filters.push(eq(salesCommissions.salesUserId, cu.id));
   } else if (cu.roleKey === "team_leader") {

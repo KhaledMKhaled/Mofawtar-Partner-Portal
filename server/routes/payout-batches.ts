@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
@@ -17,7 +17,7 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
 payoutBatchesRouter.get("/", requirePerm("payout_batches:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { status, partnerId } = req.query as Record<string, string | undefined>;
-  const filters: any[] = [];
+  const filters: SQL[] = [];
   if (partnerScoped(cu)) filters.push(eq(payoutBatches.partnerId, cu.partnerId!));
   else if (partnerId) filters.push(eq(payoutBatches.partnerId, Number(partnerId)));
   if (status) filters.push(eq(payoutBatches.status, status));
@@ -94,8 +94,9 @@ payoutBatchesRouter.post("/", requirePerm("payout_batches:create"), async (req, 
       partnerId, cycle: parsed.data.cycle, salesCommissionIds: parsed.data.salesCommissionIds, userId: cu.id, notes: parsed.data.notes,
     });
     res.json(result);
-  } catch (e: any) {
-    res.status(400).json({ error: e.message ?? "failed" });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ error: msg || "failed" });
   }
 });
 
@@ -103,14 +104,14 @@ payoutBatchesRouter.post("/:id/approve", requirePerm("payout_batches:approve"), 
   const cu = getUser(req)!;
   if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
   try { await approvePayoutBatch(Number(req.params.id), cu.id); res.json({ ok: true }); }
-  catch (e: any) { res.status(409).json({ error: e.message }); }
+  catch (e: unknown) { res.status(409).json({ error: e instanceof Error ? e.message : String(e) }); }
 });
 
 payoutBatchesRouter.post("/:id/pay", requirePerm("payout_batches:approve"), async (req, res) => {
   const cu = getUser(req)!;
   if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
   try { await payPayoutBatch(Number(req.params.id), cu.id); res.json({ ok: true }); }
-  catch (e: any) { res.status(409).json({ error: e.message }); }
+  catch (e: unknown) { res.status(409).json({ error: e instanceof Error ? e.message : String(e) }); }
 });
 
 // Bulk: mark eligible_for_payout for sales commissions in `new` status for a partner.

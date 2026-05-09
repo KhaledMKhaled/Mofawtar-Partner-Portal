@@ -22,6 +22,8 @@ export function AuditLogPage() {
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
   const [partnerId, setPartnerId] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [requestId, setRequestId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -31,13 +33,15 @@ export function AuditLogPage() {
     if (entityType) params.entityType = entityType;
     if (action) params.action = action;
     if (partnerId) params.partnerId = partnerId;
+    if (customerId) params.customerId = customerId;
+    if (requestId) params.requestId = requestId;
     if (from) params.from = from;
     if (to) params.to = to;
     return new URLSearchParams(params).toString();
   };
 
   const list = useQuery({
-    queryKey: ["audit-log", q, entityType, action, partnerId, from, to],
+    queryKey: ["audit-log", q, entityType, action, partnerId, customerId, requestId, from, to],
     queryFn: () => api<Row[]>(`/api/audit-log?${buildQuery()}`),
   });
 
@@ -56,6 +60,8 @@ export function AuditLogPage() {
         </select>
         <input className="input" placeholder={t("auditLog.actionFilter") as string} value={action} onChange={(e) => setAction(e.target.value)} />
         <input className="input" type="number" placeholder={t("auditLog.partnerIdFilter") as string} value={partnerId} onChange={(e) => setPartnerId(e.target.value)} />
+        <input className="input" type="number" placeholder={t("auditLog.customerIdFilter") as string} value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
+        <input className="input" type="number" placeholder={t("auditLog.requestIdFilter") as string} value={requestId} onChange={(e) => setRequestId(e.target.value)} />
         <div className="grid grid-cols-2 gap-2">
           <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} title={t("common.from") as string} />
           <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} title={t("common.to") as string} />

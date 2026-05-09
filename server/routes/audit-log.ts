@@ -8,13 +8,16 @@ import { getUser, requirePerm } from "../auth.js";
 export const auditLogRouter = Router();
 
 function buildFilters(req: import("express").Request, cu: NonNullable<ReturnType<typeof getUser>>): SQL | undefined {
-  const { action, entityType, partnerId, q, from, to } = req.query as Record<string, string | undefined>;
+  const { action, entityType, partnerId, customerId, requestId, userId, q, from, to } = req.query as Record<string, string | undefined>;
   const filters: SQL[] = [];
   if (cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
     filters.push(eq(auditLog.partnerId, cu.partnerId));
   } else if (partnerId) {
     filters.push(eq(auditLog.partnerId, Number(partnerId)));
   }
+  if (customerId) filters.push(eq(auditLog.customerId, Number(customerId)));
+  if (requestId) filters.push(eq(auditLog.requestId, Number(requestId)));
+  if (userId) filters.push(eq(auditLog.userId, Number(userId)));
   if (action) filters.push(ilike(auditLog.action, `%${action}%`));
   if (entityType) filters.push(eq(auditLog.entityType, entityType));
   if (q) filters.push(or(ilike(auditLog.action, `%${q}%`), ilike(auditLog.note, `%${q}%`))!);

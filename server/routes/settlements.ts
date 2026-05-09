@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import { settlements, partners, claims, orderPayments, partnerCommissions } from "../schema.js";
@@ -15,7 +15,7 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
 settlementsRouter.get("/", requirePerm("settlements:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { partnerId } = req.query as Record<string, string | undefined>;
-  const filters: any[] = [];
+  const filters: SQL[] = [];
   if (partnerScoped(cu)) filters.push(eq(settlements.partnerId, cu.partnerId!));
   else if (partnerId) filters.push(eq(settlements.partnerId, Number(partnerId)));
   const where = filters.length ? and(...filters) : undefined;
@@ -82,7 +82,8 @@ settlementsRouter.post("/", requirePerm("settlements:create"), async (req, res) 
   try {
     const r = await createSettlement({ partnerId, claimId: parsed.data.claimId, userId: cu.id, notes: parsed.data.notes });
     res.json(r);
-  } catch (e: any) {
-    res.status(400).json({ error: e.message ?? "failed" });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(400).json({ error: msg || "failed" });
   }
 });

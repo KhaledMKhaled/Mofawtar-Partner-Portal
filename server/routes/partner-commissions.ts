@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
@@ -18,7 +18,7 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
 partnerCommissionsRouter.get("/", requirePerm("partner_commissions:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { status, partnerId, from, to } = req.query as Record<string, string | undefined>;
-  const filters: any[] = [];
+  const filters: SQL[] = [];
   if (partnerScoped(cu)) filters.push(eq(partnerCommissions.partnerId, cu.partnerId!));
   else if (partnerId) filters.push(eq(partnerCommissions.partnerId, Number(partnerId)));
   if (status) filters.push(eq(partnerCommissions.status, status));

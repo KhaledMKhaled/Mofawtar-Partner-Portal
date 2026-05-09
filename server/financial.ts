@@ -704,20 +704,38 @@ export async function createSettlement(opts: {
     await db.update(orderPayments).set({ settlementId: settlement.id }).where(eq(orderPayments.id, o.id));
   }
 
-  // Move partner commissions to ready_for_settlement → settled_successfully
+  // Move partner commissions to ready_for_settlement → settled_successfully.
+  // When the settlement is bound to a specific claim, only that claim's items
+  // are touched. When no claim is provided (e.g., direct settlement after
+  // claim approval), all of this partner's `claim_approved` commissions are
+  // moved through the same lifecycle so the claim/settlement linkage is
+  // never left dangling.
+  const itemsToSettle = claim
+    ? await db.select({ partnerCommissionId: claimItems.partnerCommissionId }).from(claimItems).where(eq(claimItems.claimId, claim.id))
+    : (await db.select({ partnerCommissionId: partnerCommissions.id })
+        .from(partnerCommissions)
+        .where(and(eq(partnerCommissions.partnerId, opts.partnerId), eq(partnerCommissions.status, "claim_approved")))
+      );
+  for (const it of itemsToSettle) {
+    await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber });
+    await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber });
+    await db.update(partnerCommissions).set({ settlementId: settlement.id }).where(eq(partnerCommissions.id, it.partnerCommissionId));
+  }
   if (claim) {
-    const its = await db.select().from(claimItems).where(eq(claimItems.claimId, claim.id));
-    for (const it of its) {
-      await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber });
-      await transitionPartnerCommission({ id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber });
-      await db.update(partnerCommissions).set({ settlementId: settlement.id }).where(eq(partnerCommissions.id, it.partnerCommissionId));
-    }
     await db.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, claim.id));
     await notifyPartnerAccountants(opts.partnerId, "claim.settled", {
       titleEn: `Claim ${claim.claimNumber} settled`,
       titleAr: `تمت تسوية المطالبة ${claim.claimNumber}`,
       entityType: "claim", entityId: claim.id, linkPath: `/claims/${claim.id}`,
     });
+  } else {
+    // Mark all of this partner's open approved claims as settled and link
+    // them to this settlement, so the claim → settlement transition is
+    // consistent regardless of which UI path opened the settlement.
+    const openClaims = await db.select().from(claims).where(and(eq(claims.partnerId, opts.partnerId), eq(claims.status, "approved")));
+    for (const c of openClaims) {
+      await db.update(claims).set({ status: "settled", settledAt: new Date(), settlementId: settlement.id }).where(eq(claims.id, c.id));
+    }
   }
 
   await audit({ userId: opts.userId, action: "settlement.completed", entityType: "settlement", entityId: settlement.id, partnerId: opts.partnerId, newValue: settlement });

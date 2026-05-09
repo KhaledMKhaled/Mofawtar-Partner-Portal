@@ -437,6 +437,8 @@ export const ar: Translations = {
     anyEntity: "أي كيان",
     actionFilter: "الإجراء يحتوي…",
     partnerIdFilter: "معرّف الشريك",
+    customerIdFilter: "معرّف العميل",
+    requestIdFilter: "معرّف الطلب",
   },
   excelImport: {
     title: "استيراد إكسل",
