@@ -146,6 +146,7 @@ export const ar: Translations = {
     new: "مستخدم جديد",
     teamLeader: "قائد الفريق",
     none: "—",
+    selectPartnerFirst: "اختر الشريك أولاً",
   },
   roles: {
     title: "الأدوار والصلاحيات",

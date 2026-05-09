@@ -144,6 +144,7 @@ export const en = {
     new: "New user",
     teamLeader: "Team leader",
     none: "—",
+    selectPartnerFirst: "Select a partner first",
   },
   roles: {
     title: "Roles & Permissions",

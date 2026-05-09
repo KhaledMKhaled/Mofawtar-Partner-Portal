@@ -245,15 +245,21 @@ export function UsersPage() {
               </select>
             </Field>
           )}
-          {showTeamLeader && !!tlPartnerId && (
+          {showTeamLeader && (
             <Field label={t("users.teamLeader")}>
               <select
                 className="input"
                 value={form.teamLeaderId ?? ""}
                 onChange={(e) => setForm({ ...form, teamLeaderId: e.target.value ? Number(e.target.value) : null })}
-                disabled={tlQ.isLoading}
+                disabled={!tlPartnerId || tlQ.isLoading}
               >
-                <option value="">{tlQ.isLoading ? t("common.loading") : "—"}</option>
+                <option value="">
+                  {!tlPartnerId
+                    ? t("users.selectPartnerFirst")
+                    : tlQ.isLoading
+                    ? t("common.loading")
+                    : "—"}
+                </option>
                 {tlQ.data?.map((t2) => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
               </select>
             </Field>
