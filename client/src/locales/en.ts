@@ -385,6 +385,11 @@ export const en = {
     approve: "Approve",
     reject: "Reject",
     createFromSelected: "Create claim ({{count}})",
+    newClaim: "New claim",
+    manualBuilder: "Manual claim builder",
+    notes: "Notes",
+    noEligible: "No eligible commissions for this partner.",
+    createManual: "Create claim ({{count}})",
   },
   payoutBatches: {
     subtitle: "Batches that group sales commissions for cycle-based payout.",

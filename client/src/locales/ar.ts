@@ -387,6 +387,11 @@ export const ar: Translations = {
     approve: "اعتماد",
     reject: "رفض",
     createFromSelected: "إنشاء مطالبة ({{count}})",
+    newClaim: "مطالبة جديدة",
+    manualBuilder: "إنشاء مطالبة يدوية",
+    notes: "ملاحظات",
+    noEligible: "لا توجد عمولات مؤهلة لهذا الشريك.",
+    createManual: "إنشاء مطالبة ({{count}})",
   },
   payoutBatches: {
     subtitle: "تجميع عمولات المبيعات لصرفها وفق الدورة.",

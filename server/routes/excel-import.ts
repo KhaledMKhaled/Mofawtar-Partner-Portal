@@ -147,6 +147,10 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       updated++;
     }
   } else if (parsed.data.entity === "requests") {
+    // Bulk request status updates re-use the same side-effect chain as the
+    // UI transition route: ALLOWED_TRANSITIONS guard + onRequestActivated
+    // (financial bootstrap + ownership) when crossing into `activated`.
+    const { onRequestActivated } = await import("../financial.js");
     for (let i = 0; i < parsed.data.rows.length; i++) {
       const r = parsed.data.rows[i] as Record<string, unknown>;
       const id = Number(r.id);
@@ -157,8 +161,19 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       if (!existing) { failed++; failures.push({ row: i + 2, error: "not_found" }); continue; }
       const allowed = ALLOWED_TRANSITIONS[existing.status as keyof typeof ALLOWED_TRANSITIONS] ?? [];
       if (!allowed.includes(toStatus as never)) { failed++; failures.push({ row: i + 2, error: `transition_not_allowed_from_${existing.status}` }); continue; }
-      await db.update(requests).set({ status: toStatus, updatedAt: new Date() }).where(eq(requests.id, id));
+      await db.update(requests).set({ status: toStatus, updatedAt: toStatus === "activated" ? new Date() : new Date(), activatedAt: toStatus === "activated" ? new Date() : existing.activatedAt }).where(eq(requests.id, id));
       await audit({ userId: cu.id, action: "request.bulk_status_change", entityType: "request", entityId: id, requestId: id, oldValue: { status: existing.status }, newValue: { status: toStatus } });
+      if (toStatus === "activated" && existing.status !== "activated") {
+        try {
+          await onRequestActivated({ requestId: id, userId: cu.id });
+        } catch (e: unknown) {
+          // Roll the status back so the activation isn't half-applied.
+          await db.update(requests).set({ status: existing.status, activatedAt: existing.activatedAt }).where(eq(requests.id, id));
+          failed++;
+          failures.push({ row: i + 2, error: `activation_failed: ${e instanceof Error ? e.message : String(e)}` });
+          continue;
+        }
+      }
       updated++;
     }
   } else if (parsed.data.entity === "order_payments") {

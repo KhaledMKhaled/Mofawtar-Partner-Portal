@@ -14,17 +14,105 @@ interface Row {
   createdAt: string;
 }
 
+interface EligibleRow { id: number; customerName: string | null; packageName: string | null; amount: string; pct: string; baseAmount: string; createdAt: string }
+interface PartnerLite { id: number; name: string }
+
+function ManualClaimBuilder({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation();
+  const { data: user } = useCurrentUser();
+  const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
+  const [partnerId, setPartnerId] = useState<number | "">(isCompany ? "" : (user?.partnerId ?? ""));
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [notes, setNotes] = useState("");
+  const qc = useQueryClient();
+  const partnersQ = useQuery({
+    queryKey: ["partners-lite"],
+    queryFn: () => api<PartnerLite[]>("/api/partners"),
+    enabled: isCompany,
+  });
+  const eligibleQ = useQuery({
+    queryKey: ["claim-eligible", partnerId],
+    queryFn: () => api<EligibleRow[]>(`/api/claims/eligible?partnerId=${partnerId}`),
+    enabled: !!partnerId,
+  });
+  const create = useMutation({
+    mutationFn: () => api<{ id: number }>("/api/claims", {
+      method: "POST",
+      json: { partnerId: partnerId || undefined, partnerCommissionIds: Array.from(selected), notes: notes || undefined },
+    }),
+    onSuccess: () => { setSelected(new Set()); setNotes(""); qc.invalidateQueries({ queryKey: ["claims"] }); onCreated(); },
+  });
+
+  const total = (eligibleQ.data ?? []).filter((r) => selected.has(r.id)).reduce((s, r) => s + Number(r.amount), 0);
+
+  return (
+    <div className="stamp-card p-4 mb-4">
+      <div className="text-sm font-semibold mb-3">{t("claims.manualBuilder")}</div>
+      <div className="grid md:grid-cols-3 gap-3 mb-3 items-end">
+        {isCompany && (
+          <div>
+            <label className="text-xs text-muted block mb-1">{t("common.partner")}</label>
+            <select className="input" value={partnerId} onChange={(e) => { setPartnerId(e.target.value ? Number(e.target.value) : ""); setSelected(new Set()); }}>
+              <option value="">—</option>
+              {partnersQ.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="md:col-span-2">
+          <label className="text-xs text-muted block mb-1">{t("claims.notes")}</label>
+          <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+      </div>
+      {eligibleQ.data && eligibleQ.data.length > 0 ? (
+        <div className="table-wrap max-h-64 overflow-auto mb-3">
+          <table className="table text-xs">
+            <thead><tr><th></th><th>{t("common.customer")}</th><th>{t("packages.title")}</th><th className="text-end">{t("partnerCommissions.amount")}</th></tr></thead>
+            <tbody>
+              {eligibleQ.data.map((r) => (
+                <tr key={r.id}>
+                  <td><input type="checkbox" checked={selected.has(r.id)} onChange={(e) => {
+                    const n = new Set(selected);
+                    if (e.target.checked) n.add(r.id); else n.delete(r.id);
+                    setSelected(n);
+                  }} /></td>
+                  <td>{r.customerName}</td>
+                  <td>{r.packageName}</td>
+                  <td className="text-end font-mono">{fmtMoney(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : partnerId ? <div className="text-xs text-muted mb-3">{t("claims.noEligible")}</div> : null}
+      <div className="flex items-center justify-between">
+        <div className="text-sm">{t("common.total")}: <span className="font-mono font-semibold">{fmtMoney(total)}</span></div>
+        <button className="btn-primary" disabled={create.isPending || selected.size === 0 || (isCompany && !partnerId)} onClick={() => create.mutate()}>
+          {t("claims.createManual", { count: selected.size })}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ClaimsPage() {
   const { t } = useTranslation();
+  const { data: user } = useCurrentUser();
   const [status, setStatus] = useState("");
+  const [showBuilder, setShowBuilder] = useState(false);
   const list = useQuery({
     queryKey: ["claims", status],
     queryFn: () => api<Row[]>(`/api/claims?${new URLSearchParams({ status }).toString()}`),
   });
+  const canCreate = can(user, "claims:create");
 
   return (
     <div>
-      <PageHeader title={t("nav.claims")} subtitle={t("claims.subtitle")} />
+      <PageHeader
+        title={t("nav.claims")}
+        subtitle={t("claims.subtitle")}
+        actions={canCreate ? <button className="btn-primary" onClick={() => setShowBuilder((v) => !v)}>{showBuilder ? t("common.cancel") : t("claims.newClaim")}</button> : null}
+      />
+      {showBuilder && canCreate && <ManualClaimBuilder onCreated={() => setShowBuilder(false)} />}
       <div className="mb-4">
         <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t("common.all")}</option>
