@@ -653,60 +653,64 @@ requestsRouter.post("/:id/transition", requirePerm("requests:change_status"), as
   };
   if (to === "activated") update.activatedAt = new Date();
   if (to === "failed" || to === "rejected") update.rejectionReason = parsed.data.reason ?? null;
-  const [updated] = await db.update(requests).set(update).where(eq(requests.id, id)).returning();
-  await db.insert(requestStatusHistory).values({
-    requestId: id,
-    fromStatus: from,
-    toStatus: to,
-    reason: parsed.data.reason ?? null,
-    changedByUserId: cu.id,
-  });
-  await audit({
-    userId: cu.id,
-    action: `request.${to}`,
-    entityType: "request",
-    entityId: id,
-    requestId: id,
-    customerId: old.customerId,
-    partnerId: old.partnerId,
-    oldValue: { status: from },
-    newValue: { status: to, reason: parsed.data.reason ?? null },
-  });
 
-  // First activation under this partner → start ownership, then create
-  // order_payment + commission rows. If financial bootstrap throws, roll
-  // the request status back so we never leave a request `activated`
-  // without its full financial track. (Drizzle's transactional API is
-  // not used here because db helpers run their own queries; instead we
-  // perform a compensating revert.)
-  if (to === "activated") {
-    const had = await db
-      .select({ id: customerOwnership.id })
-      .from(customerOwnership)
-      .where(
-        and(
-          eq(customerOwnership.customerId, old.customerId),
-          eq(customerOwnership.partnerId, old.partnerId),
-        )
-      )
-      .limit(1);
-    if (had.length === 0) {
-      await startOwnership({ customerId: old.customerId, partnerId: old.partnerId, userId: cu.id });
-    }
-    try {
-      const { onRequestActivated } = await import("../financial.js");
-      await onRequestActivated({ requestId: id, userId: cu.id });
-    } catch (e: unknown) {
-      await db.update(requests).set({ status: from, activatedAt: old.activatedAt, updatedAt: new Date() }).where(eq(requests.id, id));
-      await db.insert(requestStatusHistory).values({
+  // Run the status flip, status-history row, audit entry, ownership
+  // bootstrap, and financial bootstrap (order_payment + commissions) in
+  // ONE atomic transaction. If anything inside throws — including the
+  // financial side — Postgres rolls back the whole unit, so the request
+  // is never left activated without its full financial track. We do not
+  // need a compensating revert anymore: the transaction is the rollback.
+  let updated: typeof requests.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      const [u] = await tx.update(requests).set(update).where(eq(requests.id, id)).returning();
+      await tx.insert(requestStatusHistory).values({
         requestId: id,
-        fromStatus: to,
-        toStatus: from,
-        reason: `activation rollback: ${e instanceof Error ? e.message : String(e)}`,
+        fromStatus: from,
+        toStatus: to,
+        reason: parsed.data.reason ?? null,
         changedByUserId: cu.id,
       });
-      return res.status(409).json({ error: "activation_failed", detail: e instanceof Error ? e.message : String(e) });
+      await audit({
+        userId: cu.id,
+        action: `request.${to}`,
+        entityType: "request",
+        entityId: id,
+        requestId: id,
+        customerId: old.customerId,
+        partnerId: old.partnerId,
+        oldValue: { status: from },
+        newValue: { status: to, reason: parsed.data.reason ?? null },
+      });
+
+      if (to === "activated") {
+        const had = await tx
+          .select({ id: customerOwnership.id })
+          .from(customerOwnership)
+          .where(
+            and(
+              eq(customerOwnership.customerId, old.customerId),
+              eq(customerOwnership.partnerId, old.partnerId),
+            )
+          )
+          .limit(1);
+        if (had.length === 0) {
+          await startOwnership({ customerId: old.customerId, partnerId: old.partnerId, userId: cu.id }, tx);
+        }
+        const { onRequestActivated } = await import("../financial.js");
+        await onRequestActivated({ requestId: id, userId: cu.id }, tx);
+      }
+      return u;
+    });
+  } catch (e: unknown) {
+    // Transaction was rolled back — request status is unchanged.
+    if (to === "activated") {
+      return res.status(409).json({
+        error: "activation_failed",
+        detail: e instanceof Error ? e.message : String(e),
+      });
     }
+    throw e;
   }
 
   await notifyRequestStatus(

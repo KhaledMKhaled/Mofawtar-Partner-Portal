@@ -1,6 +1,13 @@
 import { db } from "./db.js";
 import { auditLog } from "./schema.js";
 
+// Audit writes are intentionally fire-and-forget and run on the shared
+// connection pool (NOT on a caller's transaction handle): a transient
+// audit-log failure must never break the user-visible action it
+// records, and must never abort an enclosing transaction by poisoning
+// it. The trade-off is that audit rows are not rolled back together
+// with a failed transaction; that matches the historical behaviour and
+// is the right call for an observability sink.
 export async function audit(entry: {
   userId?: number | null;
   action: string;

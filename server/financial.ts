@@ -1,5 +1,5 @@
 import { and, desc, eq, sql, inArray, gte, lte } from "drizzle-orm";
-import { db } from "./db.js";
+import { db, type DbExecutor } from "./db.js";
 import {
   orderPayments,
   orderPaymentStatusHistory,
@@ -87,19 +87,22 @@ export async function resolveCommissionRates(
 // -------- On-activation hook --------
 // Called from requests.ts when a request transitions to `activated`.
 // Idempotent: returns existing rows if already created for the request.
-export async function onRequestActivated(opts: {
-  requestId: number;
-  userId: number;
-}): Promise<{ orderPaymentId: number | null; partnerCommissionId: number | null; salesCommissionId: number | null }> {
-  const [r] = await db.select().from(requests).where(eq(requests.id, opts.requestId));
+export async function onRequestActivated(
+  opts: {
+    requestId: number;
+    userId: number;
+  },
+  executor: DbExecutor = db,
+): Promise<{ orderPaymentId: number | null; partnerCommissionId: number | null; salesCommissionId: number | null }> {
+  const [r] = await executor.select().from(requests).where(eq(requests.id, opts.requestId));
   // Fail-closed: an activated request without a package or partner is a
   // data integrity bug — refuse to silently no-op so the caller (and the
   // request transition) can surface the failure instead of leaving the
   // request activated with no financial track.
   if (!r) throw new Error(`request_not_found:${opts.requestId}`);
   if (!r.packageId) throw new Error(`request_missing_package:${opts.requestId}`);
-  const [pkg] = await db.select().from(packages).where(eq(packages.id, r.packageId));
-  const [partner] = await db.select().from(partners).where(eq(partners.id, r.partnerId));
+  const [pkg] = await executor.select().from(packages).where(eq(packages.id, r.packageId));
+  const [partner] = await executor.select().from(partners).where(eq(partners.id, r.partnerId));
   if (!pkg) throw new Error(`package_not_found:${r.packageId}`);
   if (!partner) throw new Error(`partner_not_found:${r.partnerId}`);
   const base = await getCommissionBase();
@@ -123,12 +126,12 @@ export async function onRequestActivated(opts: {
   // Idempotent backfill: if an order_payment already exists for this
   // request (e.g., a prior activation half-applied), reuse it and only
   // create whichever commission rows are missing.
-  const [existingOp] = await db
+  const [existingOp] = await executor
     .select()
     .from(orderPayments)
     .where(eq(orderPayments.requestId, opts.requestId))
     .limit(1);
-  const op = existingOp ?? (await db
+  const op = existingOp ?? (await executor
     .insert(orderPayments)
     .values({
       requestId: r.id,
@@ -144,7 +147,7 @@ export async function onRequestActivated(opts: {
     })
     .returning())[0];
   if (!existingOp) {
-    await db.insert(orderPaymentStatusHistory).values({
+    await executor.insert(orderPaymentStatusHistory).values({
       orderPaymentId: op.id,
       fromStatus: null,
       toStatus: "pending_collection_confirmation",
@@ -163,7 +166,7 @@ export async function onRequestActivated(opts: {
     });
   }
 
-  const [existingPc] = await db
+  const [existingPc] = await executor
     .select({ id: partnerCommissions.id })
     .from(partnerCommissions)
     .where(eq(partnerCommissions.requestId, opts.requestId))
@@ -172,7 +175,7 @@ export async function onRequestActivated(opts: {
   if (!existingPc && partnerAmount > 0) {
     const safetyDays = partner.safetyPeriodDays ?? 14;
     const safetyEnds = new Date(Date.now() + safetyDays * 24 * 60 * 60 * 1000);
-    const [pc] = await db
+    const [pc] = await executor
       .insert(partnerCommissions)
       .values({
         requestId: r.id,
@@ -188,7 +191,7 @@ export async function onRequestActivated(opts: {
       })
       .returning();
     pcId = pc.id;
-    await db.insert(partnerCommissionStatusHistory).values({
+    await executor.insert(partnerCommissionStatusHistory).values({
       partnerCommissionId: pc.id,
       fromStatus: null,
       toStatus: "in_safety_period",
@@ -206,14 +209,14 @@ export async function onRequestActivated(opts: {
     });
   }
 
-  const [existingSc] = await db
+  const [existingSc] = await executor
     .select({ id: salesCommissions.id })
     .from(salesCommissions)
     .where(eq(salesCommissions.requestId, opts.requestId))
     .limit(1);
   let scId: number | null = existingSc?.id ?? null;
   if (!existingSc && salesAmount > 0 && r.salesUserId) {
-    const [sc] = await db
+    const [sc] = await executor
       .insert(salesCommissions)
       .values({
         requestId: r.id,
@@ -230,7 +233,7 @@ export async function onRequestActivated(opts: {
       })
       .returning();
     scId = sc.id;
-    await db.insert(salesCommissionStatusHistory).values({
+    await executor.insert(salesCommissionStatusHistory).values({
       salesCommissionId: sc.id,
       fromStatus: null,
       toStatus: "new",

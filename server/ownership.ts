@@ -1,5 +1,5 @@
 import { and, desc, eq, lte, sql } from "drizzle-orm";
-import { db } from "./db.js";
+import { db, type DbExecutor } from "./db.js";
 import {
   customerOwnership,
   customers,
@@ -133,17 +133,20 @@ async function notifyOwnershipChange(
 // Helper used after the first activation of a request — closes any
 // existing returned/expired marker by no-op (we don't reuse rows) and
 // inserts a new active ownership.
-export async function startOwnership(opts: {
-  customerId: number;
-  partnerId: number;
-  userId: number;
-  start?: Date;
-}) {
+export async function startOwnership(
+  opts: {
+    customerId: number;
+    partnerId: number;
+    userId: number;
+    start?: Date;
+  },
+  executor: DbExecutor = db,
+) {
   const start = opts.start ?? new Date();
-  const [partner] = await db.select().from(partners).where(eq(partners.id, opts.partnerId));
+  const [partner] = await executor.select().from(partners).where(eq(partners.id, opts.partnerId));
   if (!partner) throw new Error("partner_not_found");
   const end = addOwnershipPeriod(start, partner);
-  const [row] = await db
+  const [row] = await executor
     .insert(customerOwnership)
     .values({
       customerId: opts.customerId,
@@ -164,7 +167,7 @@ export async function startOwnership(opts: {
     newValue: row,
   });
   // Notify partner admin(s)
-  const partnerAdmins = await db
+  const partnerAdmins = await executor
     .select({ id: users.id })
     .from(users)
     .innerJoin(sql`roles r`, sql`r.id = ${users.roleId}`)
