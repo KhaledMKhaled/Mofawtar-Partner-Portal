@@ -40,6 +40,7 @@ interface LookupResp {
 interface Pkg {
   id: number;
   name: string;
+  description?: string | null;
   finalPriceAfterTax: string;
   itemPriceBeforeTax: string;
   taxPct: string;
@@ -103,6 +104,7 @@ export function RequestWizard({
   const [customer, setCustomer] = useState<Customer>(blankCustomer);
   const [wizardPartnerId, setWizardPartnerId] = useState<number | null>(null);
   const [salesUserId, setSalesUserId] = useState<number | null>(null);
+  const [salesUserName, setSalesUserName] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftResp | null>(null);
   const [packageId, setPackageId] = useState<number | null>(null);
   const [operationType, setOperationType] = useState<OperationType | "">("");
@@ -169,7 +171,7 @@ export function RequestWizard({
 
   // Reset sales selection when company user changes the partner.
   useEffect(() => {
-    if (isCompany) setSalesUserId(null);
+    if (isCompany) { setSalesUserId(null); setSalesUserName(null); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardPartnerId]);
 
@@ -427,7 +429,12 @@ export function RequestWizard({
                 <select
                   className="input"
                   value={salesUserId ?? ""}
-                  onChange={(e) => setSalesUserId(e.target.value ? Number(e.target.value) : null)}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    setSalesUserId(id);
+                    const m = teamMembers.data?.find((x) => x.id === id);
+                    setSalesUserName(m?.name ?? null);
+                  }}
                   disabled={isCompany && !wizardPartnerId}
                 >
                   <option value="">{t("wizard.selectSales")}</option>
@@ -491,11 +498,15 @@ export function RequestWizard({
           user?.partnerName ?? "—";
         const salesName =
           user?.roleKey === "sales"
-            ? user.name
-            : teamMembers.data?.find((m) => m.id === salesUserId)?.name ?? "—";
+            ? (user.name || "—")
+            : (teamMembers.data?.find((m) => m.id === salesUserId)?.name
+                ?? salesUserName
+                ?? "—");
         const finalPrice = pkg ? Number(pkg.finalPriceAfterTax) : 0;
         const beforeTax = pkg ? Number(pkg.itemPriceBeforeTax) : 0;
         const taxAmount = Math.max(0, finalPrice - beforeTax);
+        const taxPctNum = pkg ? Number(pkg.taxPct) : 0;
+        const taxLabel = `Tax (${taxPctNum.toFixed(taxPctNum % 1 ? 2 : 0)}%)`;
         const receiptRef = receiptElRef;
         const onSave = async () => {
           if (!receiptRef.current) return;
@@ -529,6 +540,9 @@ export function RequestWizard({
                   <Summary label={t("wizard.assignSales")} value={salesName} />
                   <Summary label={t("requests.operationType")} value={operationType ? t(`operationTypes.${operationType}`) : "—"} />
                   <Summary label={t("requests.package")} value={pkg ? pkg.name : "—"} />
+                  {pkg?.description && (
+                    <Summary label={t("common.description")} value={pkg.description} />
+                  )}
                   <Summary label={t("requests.realReceiptNumber")} value={realReceiptNumber || "—"} mono />
                   <Summary label={t("customers.primaryPhone")} value={customer.primaryPhone || "—"} mono />
                   <Summary label={t("requests.collectionConfirmation")} value={collectionConfirmed ? t("common.yes") : t("common.no")} />
@@ -581,12 +595,17 @@ export function RequestWizard({
                   <div style={{ fontWeight: 700 }}>REQUEST</div>
                   <Row label="Operation" value={operationType || "—"} />
                   <Row label="Package" value={pkg?.name ?? "—"} />
+                  {pkg?.description && (
+                    <div style={{ fontSize: "10px", fontStyle: "italic", paddingInlineStart: 8, opacity: 0.85 }}>
+                      {pkg.description}
+                    </div>
+                  )}
                   {realReceiptNumber && <Row label="Receipt #" value={realReceiptNumber} />}
                   <Row label="Sales Rep" value={salesName} />
                   <Sep />
                   <div style={{ fontWeight: 700 }}>AMOUNT</div>
                   <Row label="Subtotal" value={beforeTax.toFixed(2)} />
-                  <Row label="Tax" value={taxAmount.toFixed(2)} />
+                  <Row label={taxLabel} value={taxAmount.toFixed(2)} />
                   <Sep />
                   <Row label="TOTAL" value={`${finalPrice.toFixed(2)} EGP`} bold big />
                   <Sep />
