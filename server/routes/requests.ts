@@ -812,6 +812,48 @@ const reassignInput = z.object({
   reason: z.string().optional().nullable(),
 });
 
+// List sales users that a given draft request may be reassigned to.
+// Constraint: same partner AND same team_leader as the request's current sales rep.
+requestsRouter.get("/:id/reassignable-sales", requirePerm("requests:reassign"), async (req, res) => {
+  const id = Number(req.params.id);
+  const cu = getUser(req)!;
+  const [old] = await db.select().from(requests).where(eq(requests.id, id));
+  if (!old) return res.status(404).json({ error: "not_found" });
+  if (cu.partnerId && old.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
+  if (old.status !== "draft_sr") return res.status(409).json({ error: "only_draft_reassignable" });
+  if (!old.partnerId) return res.json([]);
+
+  // Source of truth: the current sales rep's team_leader. Fall back to request.teamLeaderId only if
+  // the assignee no longer exists. This ensures GET and POST scope identically.
+  let teamLeaderId: number | null = null;
+  if (old.salesUserId) {
+    const [curSales] = await db.select().from(users).where(eq(users.id, old.salesUserId));
+    teamLeaderId = curSales?.teamLeaderId ?? null;
+    if (!curSales) teamLeaderId = old.teamLeaderId ?? null;
+  } else {
+    teamLeaderId = old.teamLeaderId ?? null;
+  }
+  const filters = [
+    eq(users.partnerId, old.partnerId),
+    eq(roles.key, "sales"),
+    eq(users.status, "active"),
+    // Always enforce same-team — including the legacy null case (only orphan-team sales reps may
+    // receive an orphan-team request). This mirrors the POST-side check exactly.
+    teamLeaderId
+      ? eq(users.teamLeaderId, teamLeaderId)
+      : sql`${users.teamLeaderId} IS NULL`,
+  ];
+  if (old.salesUserId) filters.push(sql`${users.id} <> ${old.salesUserId}`);
+
+  const rows = await db
+    .select({ id: users.id, name: users.name, email: users.email, teamLeaderId: users.teamLeaderId })
+    .from(users)
+    .innerJoin(roles, eq(roles.id, users.roleId))
+    .where(and(...filters))
+    .orderBy(users.name);
+  res.json(rows);
+});
+
 requestsRouter.post("/:id/reassign", requirePerm("requests:reassign"), async (req, res) => {
   const id = Number(req.params.id);
   const parsed = reassignInput.safeParse(req.body);
@@ -823,8 +865,27 @@ requestsRouter.post("/:id/reassign", requirePerm("requests:reassign"), async (re
   if (old.status !== "draft_sr") return res.status(409).json({ error: "only_draft_reassignable" });
   const [s] = await db.select().from(users).where(eq(users.id, parsed.data.toSalesUserId));
   if (!s || s.partnerId !== old.partnerId) return res.status(400).json({ error: "invalid_sales_user" });
+  if (s.status !== "active") return res.status(400).json({ error: "invalid_sales_user" });
+  if (s.id === old.salesUserId) return res.status(400).json({ error: "same_sales_user" });
   const [salesRole] = await db.select().from(roles).where(eq(roles.id, s.roleId));
   if (salesRole?.key !== "sales") return res.status(400).json({ error: "invalid_sales_user" });
+
+  // Enforce: new sales rep must belong to the same team (team_leader) as the request's current sales rep.
+  // Source of truth = current assignee's team_leader (fallback to request.teamLeaderId only if assignee gone).
+  let oldTeamLeaderId: number | null = null;
+  if (old.salesUserId) {
+    const [curSales] = await db.select().from(users).where(eq(users.id, old.salesUserId));
+    oldTeamLeaderId = curSales ? (curSales.teamLeaderId ?? null) : (old.teamLeaderId ?? null);
+  } else {
+    oldTeamLeaderId = old.teamLeaderId ?? null;
+  }
+  if (oldTeamLeaderId && s.teamLeaderId !== oldTeamLeaderId) {
+    return res.status(400).json({ error: "different_team" });
+  }
+  // If old request had no team, only allow reassigning to a sales rep that also has none (rare/legacy).
+  if (!oldTeamLeaderId && s.teamLeaderId) {
+    return res.status(400).json({ error: "different_team" });
+  }
 
   const fromSales = old.salesUserId;
   const [updated] = await db

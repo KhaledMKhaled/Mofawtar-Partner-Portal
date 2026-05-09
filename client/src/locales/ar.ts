@@ -242,6 +242,8 @@ export const ar: Translations = {
     reopenTarget: "إعادة الفتح إلى",
     reassign: "إعادة إسناد",
     reassignTo: "إعادة الإسناد إلى",
+    reassignScopeNotice: "إعادة الإسناد متاحة فقط لمندوبي مبيعات نشطين داخل نفس الشريك وداخل نفس الفريق التابع له المندوب الحالي — وذلك للحفاظ على دقة العمولات والحسابات.",
+    noReassignCandidates: "لا يوجد مندوبون مؤهلون للإسناد داخل هذا الفريق.",
     collectionConfirmation: "تأكيد التحصيل",
     collectedBySales: "أؤكد أن المبلغ تم تحصيله من العميل.",
     statuses: {
@@ -345,6 +347,8 @@ export const ar: Translations = {
       not_reopenable: "لا يمكن إعادة فتح هذا الطلب.",
       only_draft_reassignable: "لا يمكن إعادة إسناد سوى الطلبات المسودة.",
       invalid_sales_user: "المندوب المختار غير صالح لهذا الشريك.",
+      different_team: "إعادة الإسناد مسموحة فقط داخل نفس الفريق.",
+      same_sales_user: "هذا المندوب مُسنَد له الطلب بالفعل.",
       sales_user_required: "يجب اختيار مندوب المبيعات المسؤول عن هذا الطلب.",
       partner_required: "يجب اختيار الشريك.",
       forbidden: "ليست لديك صلاحية لتنفيذ هذا الإجراء.",

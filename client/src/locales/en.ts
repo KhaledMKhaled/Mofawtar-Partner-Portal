@@ -240,6 +240,8 @@ export const en = {
     reopenTarget: "Reopen to",
     reassign: "Reassign",
     reassignTo: "Reassign to",
+    reassignScopeNotice: "Reassignment is restricted to active sales reps within the same partner and same team as the current assignee — this preserves commission accuracy.",
+    noReassignCandidates: "No eligible sales reps available in this team.",
     collectionConfirmation: "Collection confirmation",
     collectedBySales: "I confirm the amount was collected from the customer.",
     statuses: {
@@ -343,6 +345,8 @@ export const en = {
       not_reopenable: "This request cannot be reopened.",
       only_draft_reassignable: "Only draft requests can be reassigned.",
       invalid_sales_user: "Selected sales rep is not valid for this partner.",
+      different_team: "You can only reassign to a sales rep within the same team.",
+      same_sales_user: "This is already the assigned sales rep.",
       sales_user_required: "You must select a sales rep responsible for this request.",
       partner_required: "You must select a partner.",
       forbidden: "You do not have permission to perform this action.",

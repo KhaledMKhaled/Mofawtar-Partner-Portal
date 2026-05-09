@@ -70,8 +70,11 @@ export function RequestDetailPage() {
   });
 
   const partnerUsers = useQuery({
-    queryKey: ["users", "for-reassign"],
-    queryFn: () => api<{ id: number; name: string }[]>("/api/users"),
+    queryKey: ["requests", id, "reassignable-sales"],
+    queryFn: () =>
+      api<{ id: number; name: string; email: string; teamLeaderId: number | null }[]>(
+        `/api/requests/${id}/reassignable-sales`,
+      ),
     enabled: showAction === "reassign",
   });
 
@@ -281,8 +284,24 @@ export function RequestDetailPage() {
         )}
         {showAction === "reassign" && (
           <div className="space-y-3">
-            <Field label={t("requests.reassignTo")} required>
-              <select className="input" value={toSalesUserId} onChange={(e) => setToSalesUserId(e.target.value ? Number(e.target.value) : "")}>
+            <div className="rounded-lg bg-amber-50 text-amber-800 px-3 py-2 text-xs">
+              {t("requests.reassignScopeNotice")}
+            </div>
+            <Field
+              label={t("requests.reassignTo")}
+              required
+              hint={
+                partnerUsers.data && partnerUsers.data.length === 0
+                  ? t("requests.noReassignCandidates")
+                  : undefined
+              }
+            >
+              <select
+                className="input"
+                value={toSalesUserId}
+                onChange={(e) => setToSalesUserId(e.target.value ? Number(e.target.value) : "")}
+                disabled={!partnerUsers.data || partnerUsers.data.length === 0}
+              >
                 <option value="">—</option>
                 {partnerUsers.data?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
