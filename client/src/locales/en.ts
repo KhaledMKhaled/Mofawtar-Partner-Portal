@@ -432,6 +432,9 @@ export const en = {
     entity: "Entity",
     details: "Details",
     viewDiff: "View change",
+    anyEntity: "Any entity",
+    actionFilter: "Action contains…",
+    partnerIdFilter: "Partner ID",
   },
   excelImport: {
     title: "Excel import",
@@ -445,6 +448,17 @@ export const en = {
     failed: "Failed",
     viewFailures: "View failures",
     row: "Row",
+    stepUpload: "1. Upload",
+    stepValidate: "2. Validate",
+    stepConfirm: "3. Confirm",
+    downloadTemplate: "Download template",
+    validateAction: "Validate rows",
+    confirmApply: "Confirm & apply ({{count}})",
+    startOver: "Start over",
+    validationIssues: "Validation issues",
+    totalRows: "Total rows",
+    validRows: "Valid",
+    invalidRows: "Invalid",
   },
   financial: {
     paymentStatuses: {

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
+import { Download } from "lucide-react";
 
 interface Row {
   id: number;
@@ -13,25 +14,56 @@ interface Row {
   createdAt: string;
 }
 
+const ENTITY_TYPES = ["request","customer","ownership","order_payment","partner_commission","sales_commission","claim","payout_batch","settlement","user","partner","package"] as const;
+
 export function AuditLogPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState("");
   const [entityType, setEntityType] = useState("");
+  const [action, setAction] = useState("");
+  const [partnerId, setPartnerId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const buildQuery = () => {
+    const params: Record<string, string> = {};
+    if (q) params.q = q;
+    if (entityType) params.entityType = entityType;
+    if (action) params.action = action;
+    if (partnerId) params.partnerId = partnerId;
+    if (from) params.from = from;
+    if (to) params.to = to;
+    return new URLSearchParams(params).toString();
+  };
+
   const list = useQuery({
-    queryKey: ["audit-log", q, entityType],
-    queryFn: () => api<Row[]>(`/api/audit-log?${new URLSearchParams({ q, entityType }).toString()}`),
+    queryKey: ["audit-log", q, entityType, action, partnerId, from, to],
+    queryFn: () => api<Row[]>(`/api/audit-log?${buildQuery()}`),
   });
+
+  const exportTo = (kind: "csv" | "xlsx") => {
+    window.open(`/api/audit-log/export.${kind}?${buildQuery()}`, "_blank");
+  };
+
   return (
     <div>
       <PageHeader title={t("nav.audit_log")} subtitle={t("auditLog.subtitle")} />
-      <div className="flex flex-wrap gap-2 mb-4">
-        <input className="input" placeholder={t("common.search") as string} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="grid md:grid-cols-6 gap-2 mb-4">
+        <input className="input md:col-span-2" placeholder={t("common.search") as string} value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" value={entityType} onChange={(e) => setEntityType(e.target.value)}>
-          <option value="">{t("common.all")}</option>
-          {["request","customer","ownership","order_payment","partner_commission","sales_commission","claim","payout_batch","settlement","user","partner","package"].map((e) => (
-            <option key={e} value={e}>{e}</option>
-          ))}
+          <option value="">{t("auditLog.anyEntity")}</option>
+          {ENTITY_TYPES.map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
+        <input className="input" placeholder={t("auditLog.actionFilter") as string} value={action} onChange={(e) => setAction(e.target.value)} />
+        <input className="input" type="number" placeholder={t("auditLog.partnerIdFilter") as string} value={partnerId} onChange={(e) => setPartnerId(e.target.value)} />
+        <div className="grid grid-cols-2 gap-2">
+          <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} title={t("common.from") as string} />
+          <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} title={t("common.to") as string} />
+        </div>
+      </div>
+      <div className="flex gap-2 mb-3">
+        <button className="btn-secondary" onClick={() => exportTo("csv")}><Download className="w-4 h-4" /> CSV</button>
+        <button className="btn-secondary" onClick={() => exportTo("xlsx")}><Download className="w-4 h-4" /> Excel</button>
       </div>
       <div className="table-wrap">
         <table className="table">

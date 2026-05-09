@@ -434,6 +434,9 @@ export const ar: Translations = {
     entity: "الكيان",
     details: "التفاصيل",
     viewDiff: "عرض التغيير",
+    anyEntity: "أي كيان",
+    actionFilter: "الإجراء يحتوي…",
+    partnerIdFilter: "معرّف الشريك",
   },
   excelImport: {
     title: "استيراد إكسل",
@@ -447,6 +450,17 @@ export const ar: Translations = {
     failed: "فشل",
     viewFailures: "عرض الفشل",
     row: "صف",
+    stepUpload: "١. رفع",
+    stepValidate: "٢. التحقق",
+    stepConfirm: "٣. تأكيد",
+    downloadTemplate: "تحميل قالب",
+    validateAction: "تحقق من الصفوف",
+    confirmApply: "تأكيد وتطبيق ({{count}})",
+    startOver: "البدء من جديد",
+    validationIssues: "مشاكل التحقق",
+    totalRows: "إجمالي الصفوف",
+    validRows: "صحيحة",
+    invalidRows: "غير صحيحة",
   },
   financial: {
     paymentStatuses: {
