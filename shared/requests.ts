@@ -67,6 +67,7 @@ export const NOTIFICATION_TYPES = [
   "ownership.expired",
   "ownership.extended",
   "ownership.transferred",
+  "ownership.returned",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
