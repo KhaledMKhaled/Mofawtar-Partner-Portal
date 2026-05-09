@@ -1,0 +1,1482 @@
+تمام، اعتمدت إن **Activated هو الذي يبدأ مدة ملكية العميل وحق العمولة**. وده البرومبت النهائي الكامل شامل كل التفاصيل والقرارات، مع إضافة جزء **ملكية العميل والعمولة المتكررة** بشكل واضح عشان Replit AI مايلخبطش بين الطلبات، التحصيل، عمولة الموزع، عمولة السيلز، وملكية العميل. اعتمدت في تجميعه على الوصف الأصلي والقرارات النهائية اللي ثبتناها مع بعض.  
+
+انسخ البرومبت التالي كما هو داخل Replit:
+
+```text
+Build a complete working web portal called Mofawter Partner Portal (MPP).
+
+MPP is a partner management, onboarding, customer activation, operations, commissions, claims, payment settlement, and reporting portal.
+
+The portal connects the main company with its partners/distributors. Partners create customer activation requests, the main company reviews and activates them, and the system tracks customer money, partner commissions, sales commissions, customer ownership, recurring commissions, claims, and settlements.
+
+Important:
+- Do not build only static screens or a mockup.
+- Build a functional portal with saved data, working forms, tables, filters, dashboards, role permissions, status transitions, and financial calculations.
+- Do not ask follow-up questions. Use the rules and defaults written here.
+- Arabic should be the default language and RTL.
+- English should also be supported and LTR.
+- All labels, buttons, status names, reports, notifications, and receipts should be translatable.
+- Use clear business-friendly screens.
+- Focus on the core workflow first and make it complete.
+
+Default currency:
+- EGP by default.
+- Make currency configurable later if possible.
+
+Default timezone:
+- Use Egypt/Cairo timezone by default.
+
+==================================================
+0. Main Business Concept
+==================================================
+
+The main company manages partners.
+
+Each partner has users such as:
+- Partner Admin
+- Partner Accountant
+- Team Leader
+- Sales
+
+Sales users create customer requests using the customer Tax Card Number.
+
+The Tax Card Number is the main unique customer identifier.
+
+The request passes through a 4-step wizard:
+1. Search by Tax Card Number
+2. Enter customer data
+3. Select package and confirm collection
+4. Review and submit
+
+After submission, the request appears to the main company team.
+
+The main company can:
+- Receive request
+- Work on activation
+- Activate request
+- Reject or fail request with reason
+- Reopen rejected or failed requests
+- Manage financial settlement
+- Manage commissions
+- Manage claims
+- Manage reports
+
+The system must keep three financial tracks separated:
+1. Order Payment Status
+   This tracks the actual money collected from the customer.
+
+2. Partner Commission Status
+   This tracks the partner commission and settlement/offset.
+
+3. Sales Commission Status
+   This tracks the sales commission paid by the main company.
+
+Do not mix these three tracks.
+
+The system must also track customer ownership:
+- When a customer is first activated through a partner, the partner owns the customer for a configured ownership period, for example 3 years.
+- During this period, the partner is entitled to recurring commission on eligible transactions such as renewals, upgrades, add-on packages, recurring payments, and new paid services.
+- After the ownership period expires, the customer returns to the main company and the partner no longer earns new commissions from that customer.
+- Activated status is the event that starts customer ownership and commission entitlement.
+
+==================================================
+1. Default User Roles
+==================================================
+
+The system starts with 6 default user types.
+
+1. Company Super Admin
+- Belongs to the main company.
+- Can see and manage everything.
+- Can create partners.
+- Can create the first Partner Admin account for each partner.
+- Can manage users, roles, permissions, packages, commission rules, claims, payments, reports, financial settings, and ownership settings.
+- Can create additional company roles later, such as:
+  - Operations Agent
+  - Activation Officer
+  - Support Agent
+  - Reviewer
+  - Finance Reviewer
+
+2. Company Accountant
+- Belongs to the main company.
+- Handles financial operations.
+- Can manage:
+  - Partner claims
+  - Partner commissions
+  - Sales commissions
+  - Payout batches
+  - Payment confirmations
+  - Settlements
+  - Financial reports
+- Has broad financial permissions unless reduced by Company Super Admin.
+
+3. Partner Admin
+- Belongs to one partner only.
+- Can manage internal partner users.
+- Can create Partner Accountant, Team Leader, and Sales users.
+- Can view all customers, orders, sales performance, payments, commissions, and claims inside his partner only.
+- Can reassign Draft SR requests from one Sales user to another Sales user.
+- Reassignment must be recorded in Customer 360 Timeline and Audit Log.
+
+4. Partner Accountant
+- Belongs to one partner only.
+- Handles financial tracking for that partner.
+- Can view:
+  - Collections
+  - Net amount due to company
+  - Partner commissions
+  - Claims
+  - Settlements
+  - Relevant reports
+- Cannot see other partners.
+
+5. Team Leader
+- Belongs to one partner only.
+- Can manage and monitor assigned Sales users.
+- Can view performance of his assigned Sales users only.
+- Can create a request on behalf of a Sales user, but must select the responsible Sales user.
+- Can see daily and period performance for his team.
+
+6. Sales
+- Belongs to one partner only.
+- Can create customer activation requests.
+- Can see only his own customers, requests, sales commissions, and performance.
+- If Sales creates a request, he is automatically assigned as the responsible Sales user.
+
+==================================================
+2. Role Management and Permissions
+==================================================
+
+The system must support Role Management.
+
+Company Super Admin can create new roles later and assign permissions.
+
+Permissions must be module/action based.
+
+Example actions:
+- View
+- Create
+- Edit
+- Delete
+- Approve
+- Reject
+- Export
+- Import
+- Change Status
+- Reopen
+- Reassign
+- Manage Users
+- Manage Roles
+- Manage Packages
+- Manage Commissions
+- Manage Claims
+- Manage Payments
+- Manage Ownership
+- View Financial Data
+- Export Reports
+
+Example modules:
+- Dashboard
+- Partners
+- Users
+- Roles
+- Packages
+- Customers
+- Requests
+- Payments
+- Partner Commissions
+- Sales Commissions
+- Claims
+- Settlements
+- Ownership
+- Reports
+- Audit Log
+- Notifications
+- Excel Import
+
+Data privacy:
+- Each partner can only see its own data.
+- Each Sales user can only see his own data.
+- Each Team Leader can only see assigned Sales users only.
+- Partner Admin can see everything inside his partner.
+- Main company users can see data according to their permissions.
+
+==================================================
+3. Authentication and User Management
+==================================================
+
+Build authentication screens:
+- Login
+- Logout
+- Forgot password
+- Reset password
+- Change password
+
+User fields:
+- User name
+- Email
+- Password
+- Profile image
+- Address where relevant
+- Role
+- Partner assignment where relevant
+- Team Leader assignment where relevant
+- Status: Active / Inactive
+
+User actions:
+- Create user
+- Edit user
+- Activate user
+- Deactivate user
+- Assign role
+- Assign partner
+- Assign Sales user to Team Leader
+
+For demo/testing, create seed login accounts for:
+- Company Super Admin
+- Company Accountant
+- Partner Admin
+- Partner Accountant
+- Team Leader
+- Sales
+
+Show demo credentials clearly on the login page or in a seed data note.
+
+==================================================
+4. Partner Management
+==================================================
+
+Company Super Admin creates partners.
+
+When creating a partner, the Company Super Admin also creates the first Partner Admin account.
+
+Partner profile fields:
+
+Basic data:
+- Partner name
+- Partner code
+- Partner Admin name
+- Partner Admin email
+- Partner Admin password
+- Partner profile image
+- Address
+- Status: Active / Inactive
+
+Contract data:
+- Contract start date
+- Partner commission percentage
+- Commission period
+- Safety period in days
+- Claim cycle type: Auto or Manual
+- If Auto, claim cycle duration in days
+- Sales commission enabled: Yes / No
+- Sales commission percentage
+- Sales commission payout cycle: Monthly or Every 3 Months
+
+Customer ownership data:
+- Customer ownership period value
+- Customer ownership period unit: Months or Years
+- Default example: 3 Years
+- This defines how long the partner remains entitled to recurring commissions from customers originally activated by this partner.
+
+Special commission rules:
+Allow special commission rules per partner and package.
+
+Each special rule should include:
+- Partner
+- Package
+- Operation type
+- Partner commission percentage
+- Sales commission percentage
+- Active / Inactive
+
+Operation types:
+- New Subscription
+- Renewal
+- Upgrade
+- Add-on Package
+- Recurring Payment
+- Other Paid Service
+
+Commission priority:
+1. If a special commission rule exists for the partner + package + operation type, use it.
+2. If not, use the partner default commission percentage.
+3. Sales commission follows the same priority if enabled.
+4. Commissions must only be created if customer ownership rules allow it.
+
+==================================================
+5. Customer Ownership and Recurring Commission Entitlement
+==================================================
+
+This is a core rule.
+
+The system must support customer ownership by partner.
+
+When a partner brings a customer and the first request for this customer becomes Activated, the system assigns this customer to that partner as the Customer Owner Partner.
+
+Important:
+- Activated status is the event that starts customer ownership.
+- Draft SR does not start ownership.
+- New Request does not start ownership.
+- Received does not start ownership.
+- Under Activation does not start ownership.
+- Failed / Rejected does not start ownership.
+- Only Activated starts customer ownership and commission entitlement.
+
+Ownership start date:
+- The first activation date for this customer under that partner.
+
+Ownership end date:
+- Ownership start date + customer ownership period from the partner profile.
+- Example:
+  Partner A activates Customer X on 2026-01-01.
+  Partner A has Customer Ownership Period = 3 Years.
+  Customer X is owned by Partner A from 2026-01-01 until 2028-12-31.
+  Starting from 2029-01-01, the ownership is expired and the customer returns to the main company.
+
+During active ownership:
+- The customer remains owned by the partner.
+- The customer remains visible inside the partner profile.
+- The partner is entitled to recurring commissions on all eligible paid transactions related to this customer.
+- Eligible transactions include:
+  - New Subscription
+  - Renewal
+  - Upgrade
+  - Add-on Package
+  - Recurring Payment
+  - Any new paid package or paid service related to the same customer
+- The commission is calculated every time an eligible paid transaction happens during the ownership period.
+- The same Customer 360 Profile must be used. Do not create duplicate customer profiles.
+
+After ownership expires:
+- The customer ownership returns to the main company.
+- The old partner no longer earns new commissions from this customer.
+- The customer remains visible in the old partner profile as historical data only.
+- The old partner can see previous requests, previous commissions, previous payments, and previous activity during its ownership period according to permissions.
+- The old partner should not see future company-only transactions unless permission allows it.
+- No new partner commission should be created for renewals, upgrades, add-ons, recurring payments, or new paid services after the ownership expiry date.
+- The main company can manually extend, transfer, or reassign customer ownership if the user has permission.
+
+Customer search ownership rules:
+- If a partner user searches for a Tax Card Number and the customer is owned by the same partner and has no active unfinished request, allow creating a new request under the same Customer 360 Profile.
+- If the customer is owned by another partner and the ownership is still active, block the partner user from creating a new request unless the main company transfers ownership.
+- If the ownership has expired and returned to the company, partner users cannot create new partner-owned requests unless the company extends or transfers ownership.
+- Company users can create company-owned transactions according to permission.
+
+Ownership statuses:
+- Active
+- Expired
+- Extended
+- Transferred
+- Returned to Company
+
+Customer 360 Profile must show:
+- Current customer owner
+- Owner partner name
+- Ownership start date
+- Ownership end date
+- Ownership status
+- Ownership history
+- Ownership changes timeline
+
+Partner Profile must show:
+- Active owned customers
+- Expired owned customers
+- Customers returned to company
+- Ownership period for each customer
+- Commission entitlement status per customer
+
+Before creating any partner commission, the system must check:
+1. Is there an owner partner for this customer?
+2. Is the transaction date inside the ownership period?
+3. Is the transaction type eligible for recurring commission?
+4. Is there a valid commission rule for this partner, package, and operation type?
+5. Is the request Activated?
+
+If yes, create partner commission.
+If no, do not create partner commission.
+
+The system must not delete old commissions after ownership expiry.
+Old commissions remain valid and visible.
+Only future commissions after the expiry date should stop.
+
+Ownership extension:
+Company Super Admin can extend ownership manually.
+
+Extension requires:
+- New ownership end date
+- Reason
+- User who made the change
+- Date and time
+
+Ownership transfer:
+Company Super Admin can transfer customer ownership from one partner to another.
+
+Transfer requires:
+- Old owner partner
+- New owner partner
+- Effective date
+- Reason
+- User who made the transfer
+- Date and time
+
+After transfer:
+- Old partner keeps historical visibility according to permissions.
+- Old partner does not earn new commissions after transfer effective date.
+- New partner earns commissions only from the transfer effective date forward.
+
+Reports must include:
+- Customer ownership report
+- Active partner-owned customers
+- Expired ownership customers
+- Customers returned to company
+- Customers near ownership expiry
+- Recurring commissions by customer
+- Recurring commissions by partner
+
+==================================================
+6. Package Management
+==================================================
+
+Create a Package Management module for Company Super Admin.
+
+Each package should include:
+- Package name
+- Description
+- Item price before tax
+- Tax percentage
+- Final price after tax
+- Duration
+- Package type
+- Active / Inactive
+- Available for all partners or selected partners
+- Default commission rules
+- Special commission rules per partner
+
+Price calculation:
+Final Price After Tax = Item Price Before Tax + (Item Price Before Tax * Tax Percentage / 100)
+
+Example:
+Item Price Before Tax = 1000
+Tax Percentage = 14%
+Final Price After Tax = 1140
+
+Commission calculation base:
+- Commissions are calculated by default on the paid amount after discounts and before tax.
+- If discounts are not implemented yet, use Item Price Before Tax as the commission base.
+- The full amount collected from the customer is the Final Price After Tax.
+- Partner commission is deducted from the full collected amount when calculating net amount due to company.
+- Sales commission is paid separately by the main company.
+
+Package display:
+- Packages should appear as clear cards during the request wizard.
+- Each card should show:
+  - Package name
+  - Description
+  - Item price before tax
+  - Tax percentage
+  - Final price after tax
+  - Duration
+
+==================================================
+7. Customer Request Creation Wizard
+==================================================
+
+Create a 4-step wizard called:
+Arabic: إنشاء طلب موحد
+English: Create Unified Request
+
+Step 1: Search by Tax Card Number
+
+Fields:
+- Tax Card Number
+
+Validation:
+- Digits only
+- Minimum length: 9 digits
+- Maximum length: 15 digits
+- This is the main unique customer identifier
+- It cannot be changed later inside the request
+
+Duplicate prevention:
+Block creating a new request for the same Tax Card Number if there is an active or unfinished request with one of these statuses:
+- Draft SR
+- New Request
+- Received
+- Under Activation
+
+Allow creating a new request for the same Tax Card Number only if the last request is:
+- Activated
+- Failed / Rejected
+
+But follow ownership rules:
+- If customer is actively owned by the same partner, allow creating a new eligible transaction request.
+- If customer is actively owned by another partner, block request creation.
+- If ownership expired and returned to company, partner cannot create a new request unless company extends/transfers ownership.
+- If company user creates the request, follow company permissions.
+
+Step 2: Customer Data
+
+Required fields:
+- Tax Card Number
+- Email
+- Commercial name
+- Name on tax card
+- Business activity type
+- Full address
+- Primary phone
+- Responsible Sales user
+
+Optional fields:
+- Issuing authority
+- Commercial registration number
+- National ID
+- Alternative phone
+- WhatsApp checkbox for primary phone
+- WhatsApp checkbox for alternative phone
+
+Responsible Sales rule:
+- If Sales user creates the request, assign him automatically.
+- If Team Leader creates the request, he must select one of his assigned Sales users.
+- If Partner Admin creates the request, he must select a Sales user from his partner.
+- The request should appear in the selected Sales user statistics as if it belongs to him.
+
+When clicking Save and Continue after Step 2:
+- Create or update Customer 360 Profile.
+- Create a Draft SR.
+- Lock this Tax Card Number from new active requests.
+- Only the responsible Sales user and his Team Leader can continue working on this Draft SR.
+- Partner Admin can reassign the Draft SR to another Sales user.
+- Company Super Admin can view or open the request when needed.
+- Any reassignment must be recorded in Customer 360 Timeline and Audit Log.
+
+SR number format:
+Use this format:
+SR-TaxNumber-Date-Time
+
+Example:
+SR-789456123-20260509-1617
+
+If duplicate happens, add a small sequence:
+SR-789456123-20260509-1617-01
+
+Step 3: Package and Collection Confirmation
+
+Fields:
+- Operation type
+- Package
+- Optional real receipt number
+- Collection confirmation checkbox
+
+Operation type rules:
+- For a brand-new customer, default operation type is New Subscription.
+- For an existing activated customer, user can select:
+  - Renewal
+  - Upgrade
+  - Add-on Package
+  - Recurring Payment
+  - Other Paid Service
+
+Package card should show:
+- Package name
+- Description
+- Item price before tax
+- Tax percentage
+- Final price after tax
+- Duration
+
+Real receipt number:
+- Optional
+- Entered by Sales user if available
+
+Collection confirmation:
+The user must check:
+“The full amount has been collected and is under my responsibility until it is delivered.”
+
+Before this checkbox is checked:
+Order Payment Status = Pending Collection Confirmation
+
+After this checkbox is checked:
+Order Payment Status = Collected by Sales
+
+Step 4: Review and Submit
+
+Show a POS-like receipt summary before final submission.
+
+Receipt should include:
+- SR number
+- Customer name
+- Tax Card Number
+- Operation type
+- Package name
+- Item price before tax
+- Tax percentage
+- Final price after tax
+- Partner name
+- Sales name
+- Date and time
+- Real receipt number if available
+- Collection status
+- Note: The full amount has been collected and is under the responsibility of the Sales/Partner until delivery.
+- Optional QR code or reference code
+
+When user submits:
+- Request status changes from Draft SR to New Request.
+- The request becomes visible to the main company team.
+
+No file attachments are required in this version.
+Customer information is data-only for now.
+
+==================================================
+8. Order Statuses
+==================================================
+
+Use these order/request statuses:
+
+1. Draft SR
+For incomplete requests after customer data is saved.
+
+2. New Request
+After package selection, collection confirmation, and final submission.
+
+3. Received
+When the main company team receives the request.
+
+4. Under Activation
+When the main company team is working on activation.
+
+5. Activated
+When the customer/request has been successfully activated.
+
+6. Failed / Rejected
+When the request fails or is rejected. A clear reason is required.
+
+Important:
+- Activated starts customer ownership if this is the first successful activation for this customer under this partner.
+- Activated also creates financial records and commissions if rules allow it.
+
+Allowed Order Status Transitions:
+- Draft SR can move to New Request only after package selection and collection confirmation.
+- Draft SR cannot move directly to Activated.
+- New Request can move to Received.
+- Received can move to Under Activation.
+- Under Activation can move to Activated.
+- Under Activation can move to Failed / Rejected.
+- New Request cannot be converted to Activated by partner users.
+- Only authorized company users can activate a request.
+- Failed / Rejected cannot move directly to Activated without reopening and adding a reason.
+- Bulk updates and Excel updates must follow the same allowed transitions.
+
+Reopen rejected or failed requests:
+- Company users with permission can reopen a Failed / Rejected request.
+- Reopening can return the request to Draft SR or New Request depending on the correction needed.
+- The reason for reopening is required.
+- Reopening must not create a new Customer 360 Profile.
+- Reopening must appear in Customer 360 Timeline and Audit Log.
+
+Every order status change must record:
+- User who made the change
+- Date and time
+- Old status
+- New status
+- Reason or note when required
+
+==================================================
+9. Customer 360 Profile
+==================================================
+
+Every customer should have one Customer 360 Profile.
+
+The profile should include:
+- Customer basic data
+- Tax Card Number
+- Current owner
+- Ownership status
+- Ownership start date
+- Ownership end date
+- Ownership history
+- All related SR requests
+- Current active request if any
+- Packages purchased
+- Operation types
+- Payment records
+- Partner commission records
+- Sales commission records
+- Claims
+- Settlements
+- Timeline
+- Audit history
+- Status changes
+- Reassignments
+- Financial movements
+
+Customer can be searched by:
+- Customer name
+- Tax Card Number
+- SR number
+
+The Customer 360 Timeline must show:
+- Customer created
+- Customer data updated
+- Draft SR created
+- Request submitted
+- Request received
+- Request under activation
+- Request activated
+- Request rejected/failed
+- Request reopened
+- Sales reassigned
+- Ownership started
+- Ownership extended
+- Ownership transferred
+- Ownership expired
+- Ownership returned to company
+- Payment status changed
+- Partner commission created
+- Sales commission created
+- Claim created
+- Settlement completed
+
+==================================================
+10. Financial Separation
+==================================================
+
+The system must separate these financial records:
+
+1. Order Payment
+Tracks the actual customer money.
+
+2. Partner Commission
+Tracks partner entitlement and settlement/offset.
+
+3. Sales Commission
+Tracks Sales user commission paid by the main company.
+
+Do not use one status field for all financial items.
+
+Each request can have:
+- One order payment record
+- One partner commission record if eligible
+- One sales commission record if eligible
+- Related claim records
+- Related settlement records
+
+==================================================
+11. Order Payment Status
+==================================================
+
+Use these payment statuses:
+
+1. Pending Collection Confirmation
+Before the Sales user confirms that the full amount was collected.
+
+2. Collected by Sales
+The Sales user confirmed that the full amount was collected.
+
+3. Held by Partner
+The amount is now under the partner’s responsibility.
+
+4. Net Amount Due to Company
+The system calculated the net amount that the partner must deliver to the main company after deducting partner commission.
+
+5. Received by Company
+The company accountant confirmed that the net amount was received.
+
+6. Settled
+The payment has been fully settled.
+
+7. Refunded / Cancelled
+Used when the payment is cancelled or refunded.
+
+Payment status flow:
+- Pending Collection Confirmation -> Collected by Sales
+- Collected by Sales -> Held by Partner
+- Held by Partner -> Net Amount Due to Company
+- Net Amount Due to Company -> Received by Company
+- Received by Company -> Settled
+- Any relevant stage can move to Refunded / Cancelled with reason and permission
+
+Settlement rule between partner and company:
+- The partner delivers the net amount to the company after deducting partner commission.
+- Always display:
+  - Full customer amount before deduction
+  - Partner commission amount
+  - Net amount due to company after deduction
+
+Calculation:
+Full customer amount = Final price after tax
+Commission base = paid amount after discounts before tax
+Partner commission amount = commission base * partner commission %
+Net amount due to company = full customer amount - partner commission amount
+
+Example without tax:
+Package amount = 1000
+Partner commission = 20% = 200
+Net amount due to company = 800
+
+Example with tax:
+Item price before tax = 1000
+Tax = 14% = 140
+Full customer amount = 1140
+Partner commission = 20% of 1000 = 200
+Net amount due to company = 1140 - 200 = 940
+
+The company receives the net amount from the partner.
+
+==================================================
+12. Partner Commission
+==================================================
+
+Partner commission is created only after request is Activated and only if ownership rules allow it.
+
+Before creating partner commission, check:
+- Request is Activated
+- Customer has active partner ownership
+- Transaction date is inside ownership period
+- Operation type is eligible
+- Valid commission rule exists
+
+Partner Commission Statuses:
+
+1. In Safety Period
+The request is activated, but still inside the safety period.
+
+2. Eligible for Claim
+The safety period is finished and the commission is ready to be included in a claim.
+
+3. In Claim / Under Settlement
+The commission has been added to a claim.
+
+4. Claim Approved
+The company approved the claim.
+
+5. Ready for Offset / Settlement
+The commission is ready to be settled or offset against the amount due from the partner.
+
+6. Settled Successfully
+The commission has been settled successfully.
+
+7. Rejected / Adjusted
+The commission was rejected or adjusted.
+
+Safety period rule:
+- Safety period starts from the activation date.
+- The number of safety days comes from the partner profile.
+- During safety period, commission cannot be added to a claim.
+- After safety period ends, the system automatically changes commission to Eligible for Claim.
+- Record the date and time of automatic change.
+
+Claim cycle:
+- If Manual, accountant creates claims manually.
+- If Auto, system automatically creates claims every X days based on partner claim cycle.
+- Auto claims include all Eligible for Claim commissions that are not already in another claim.
+
+Partner claim statuses:
+- Draft
+- Submitted
+- Under Review
+- Approved
+- Rejected
+- Settled
+
+Claim record should include:
+- Claim number
+- Partner
+- Included commission records
+- Total full customer amount
+- Total partner commission
+- Total net amount due to company
+- Claim status
+- Created by
+- Approved by
+- Dates
+- Notes
+
+==================================================
+13. Sales Commission
+==================================================
+
+Sales commission is paid by the main company, not by the partner.
+
+Sales commission can be enabled or disabled in partner profile.
+
+If enabled, define:
+- Sales commission percentage
+- Payout cycle: Monthly or Every 3 Months
+
+Sales commission may also have special rules by:
+- Partner
+- Package
+- Operation type
+
+Sales Commission Statuses:
+
+1. New / Calculated
+The sales commission was calculated after activation.
+
+2. Eligible for Payout
+The commission is ready for payout based on the payout cycle.
+
+3. In Payout Batch
+The commission has been included in a payout batch.
+
+4. Approved by Company
+The main company approved the payout.
+
+5. Paid
+The commission was paid.
+
+6. Rejected / Adjusted
+The commission was rejected or adjusted.
+
+Sales commission rules:
+- Sales commission is calculated after request activation.
+- It belongs to the responsible Sales user.
+- It appears in the Sales user profile and dashboard.
+- Sales user can only see his own sales commissions.
+- Team Leader can see sales commissions for his team if permission allows.
+- Partner Admin can see sales commissions inside his partner if permission allows.
+- Company Accountant and Company Super Admin can manage payout batches.
+
+By default:
+- Sales commission follows customer ownership period.
+- If customer ownership expired and returned to company, no new partner-related Sales commission should be created unless company manually assigns/approves it.
+
+Always show:
+- Related customer
+- Related SR
+- Related package
+- Operation type
+- Full customer amount
+- Sales commission percentage
+- Sales commission amount
+- Payout cycle
+- Current payout status
+
+Calculation:
+Sales commission base = paid amount after discounts before tax
+Sales commission amount = commission base * sales commission %
+
+Example:
+Package item price before tax = 1000
+Sales commission = 5%
+Sales commission amount = 50
+The main company pays 50 to the Sales user in a separate payout cycle.
+
+Sales payout batch statuses:
+- Draft
+- Submitted
+- Approved by Company
+- Paid
+- Rejected / Adjusted
+
+==================================================
+14. Dashboards
+==================================================
+
+Each role must have a dedicated dashboard.
+
+Company Admin Dashboard:
+- Total partners
+- Active partners
+- Inactive partners
+- New requests
+- Requests in progress
+- Activated requests
+- Rejected requests
+- Total sales
+- Total receivables
+- Total partner commissions
+- Total sales commissions
+- Open claims
+- Customers near ownership expiry
+- Expired ownership customers
+- Best performing partners
+
+Company Accountant Dashboard:
+- Pending claims
+- Commissions under settlement
+- Net amounts due from partners
+- Payments received
+- Sales payout batches
+- Partner claim batches
+- Financial reports
+- Settled payments
+- Unsettled payments
+
+Partner Admin Dashboard:
+- Partner sales
+- Sales performance
+- Requests by status
+- Owned active customers
+- Expired owned customers
+- Due commissions
+- Claims
+- Collections
+- Net amount due to company
+- Best performing Sales users
+
+Partner Accountant Dashboard:
+- Payments
+- Collections
+- Partner commissions
+- Claims
+- Settlements
+- Net amount due to company
+- Payment status summary
+
+Team Leader Dashboard:
+- Performance of assigned Sales users
+- Daily request count
+- Activated requests
+- Rejected requests
+- Sales by Sales user
+- Current month performance
+- Last 3 months performance
+
+Sales Dashboard:
+- My requests
+- My customers
+- My commissions
+- My activated requests
+- My rejected requests
+- My monthly performance
+- My last 3 months performance
+- My eligible payouts
+- My paid commissions
+
+Dashboard filters:
+- Sales and Team Leader dashboards should have quick filters:
+  - Current month
+  - Last 3 months
+- Higher roles should have:
+  - From date
+  - To date
+  - Partner
+  - Sales
+  - Team Leader
+  - Package
+  - Status
+
+==================================================
+15. Reports
+==================================================
+
+Create a Reports module.
+
+Reports must support filters:
+- From date
+- To date
+- Partner
+- Sales
+- Team Leader
+- Request status
+- Payment status
+- Partner commission status
+- Sales commission status
+- Ownership status
+- Package type
+- Operation type
+
+Report types:
+- Requests report
+- Customers report
+- Customer ownership report
+- Active partner-owned customers report
+- Expired ownership customers report
+- Customers returned to company report
+- Customers near ownership expiry report
+- Sales report
+- Sales performance report
+- Team Leader performance report
+- Partner commissions report
+- Recurring commissions by customer report
+- Recurring commissions by partner report
+- Sales commissions report
+- Claims report
+- Collections and settlements report
+- Packages report
+- Failed or rejected requests report
+- Audit log report
+
+Each report should be exportable as:
+- Excel
+- PDF
+
+Reports must respect user permissions.
+
+==================================================
+16. Excel Import and Bulk Updates
+==================================================
+
+The system should support:
+- Adding requests in bulk by Excel
+- Updating request statuses individually
+- Updating request statuses by selected rows
+- Updating request statuses by Excel
+- Updating payment statuses individually
+- Updating payment statuses by selected rows
+- Updating payment statuses by Excel
+- Updating commission statuses individually
+- Updating commission statuses by selected rows
+- Updating commission statuses by Excel
+
+Every Excel operation must follow 3 steps:
+
+1. Upload file
+2. Preview and validation
+3. Confirm import or update
+
+Validation should show:
+- Valid rows
+- Rows with errors
+- Error reasons
+- Duplicate Tax Card Numbers
+- Existing active requests for same Tax Card Number
+- Invalid status transitions
+- Missing required data
+- Permission errors
+- Ownership conflicts
+- Expired ownership conflicts
+- Invalid package
+- Invalid Sales user
+- Invalid partner
+
+Excel and bulk updates must respect:
+- Allowed Order Status Transitions
+- Payment status flow
+- Partner commission status flow
+- Sales commission status flow
+- Ownership rules
+- User permissions
+
+Do not allow dangerous jumps:
+- Draft SR cannot move directly to Activated.
+- New Request cannot move directly to Activated by partner users.
+- Failed / Rejected cannot move directly to Activated without reopening and reason.
+- Settled Successfully commission cannot be edited except by high-level financial permission.
+- Paid sales commission cannot be edited except by high-level financial permission.
+- Expired ownership cannot be silently extended without reason and permission.
+
+Include downloadable Excel templates where possible.
+
+==================================================
+17. Notifications
+==================================================
+
+Create in-portal notifications.
+
+Notifications should be created for:
+- New request submitted
+- Request received
+- Request under activation
+- Request activated
+- Request rejected or failed
+- Request reopened
+- Sales reassigned
+- Ownership started
+- Ownership near expiry
+- Ownership expired
+- Ownership extended
+- Ownership transferred
+- Commission became eligible for claim
+- Claim created
+- Claim approved
+- Payment received by company
+- Settlement completed
+- Sales commission approved
+- Sales commission paid
+
+Notifications must respect permissions.
+For example:
+- Sales sees notifications about his own requests and commissions.
+- Team Leader sees notifications about his team.
+- Partner Admin sees partner notifications.
+- Company users see company-level notifications according to permissions.
+
+==================================================
+18. Search
+==================================================
+
+Create global search.
+
+Search by:
+- Customer name
+- Tax Card Number
+- SR number
+- Sales name
+- Partner name
+- Claim number
+- Payout batch number
+
+Search results must respect user permissions.
+
+==================================================
+19. Audit Log and Timeline
+==================================================
+
+The system must keep clear audit logs and timelines.
+
+Track all important actions:
+- User login
+- User created
+- User updated
+- User activated
+- User deactivated
+- Role created
+- Role changed
+- Permission changed
+- Partner created
+- Partner updated
+- Package created
+- Package updated
+- Customer created
+- Customer updated
+- SR created
+- Request submitted
+- Request status changed
+- Request reopened
+- Sales reassigned
+- Payment status changed
+- Partner commission created
+- Partner commission status changed
+- Sales commission created
+- Sales commission status changed
+- Claim created
+- Claim approved
+- Claim rejected
+- Settlement completed
+- Ownership started
+- Ownership extended
+- Ownership transferred
+- Ownership expired
+- Ownership returned to company
+- Excel imported
+- Bulk update completed
+- Report exported
+
+Each log entry should include:
+- Who did it
+- What action happened
+- Date and time
+- Old value
+- New value
+- Related customer if any
+- Related SR if any
+- Related partner if any
+- Reason or note when available
+
+Customer 360 Timeline must show all actions related to that customer in chronological order.
+
+==================================================
+20. User Interface Requirements
+==================================================
+
+Create a clean modern business portal.
+
+UI requirements:
+- Arabic RTL default
+- English LTR supported
+- Clear sidebar navigation
+- Role-based menus
+- Dashboard cards and charts
+- Tables with filters and search
+- Status badges
+- Step-by-step request wizard
+- Package cards
+- POS-like receipt summary
+- Customer 360 Profile page
+- Partner Profile page
+- Ownership section inside customer and partner profiles
+- Financial pages for:
+  - Payments
+  - Partner commissions
+  - Sales commissions
+  - Claims
+  - Payout batches
+  - Settlements
+- Excel import preview screens
+- Export buttons for PDF and Excel
+- Clear validation messages
+- Clear error messages
+- Clear success messages
+
+Status badges should use clear labels and colors.
+
+Arabic labels should be natural business Arabic.
+
+==================================================
+21. Suggested Main Navigation
+==================================================
+
+Navigation should be role-based.
+
+Company Super Admin navigation:
+- Dashboard
+- Partners
+- Users
+- Roles & Permissions
+- Packages
+- Customers
+- Requests
+- Payments
+- Partner Commissions
+- Sales Commissions
+- Claims
+- Payout Batches
+- Ownership
+- Reports
+- Audit Log
+- Settings
+
+Company Accountant navigation:
+- Dashboard
+- Requests
+- Payments
+- Partner Commissions
+- Sales Commissions
+- Claims
+- Payout Batches
+- Settlements
+- Reports
+
+Partner Admin navigation:
+- Dashboard
+- Users
+- Customers
+- Requests
+- Payments
+- Partner Commissions
+- Claims
+- Ownership
+- Reports
+
+Partner Accountant navigation:
+- Dashboard
+- Payments
+- Partner Commissions
+- Claims
+- Settlements
+- Reports
+
+Team Leader navigation:
+- Dashboard
+- My Team
+- Customers
+- Requests
+- Sales Performance
+- Reports
+
+Sales navigation:
+- Dashboard
+- My Customers
+- My Requests
+- My Commissions
+
+==================================================
+22. Settings
+==================================================
+
+Create settings for:
+- Language
+- Currency
+- Timezone
+- Commission calculation base
+- Default tax settings if needed
+- Ownership expiry warning days
+- Notification settings
+
+Default settings:
+- Language: Arabic
+- Direction: RTL
+- Currency: EGP
+- Timezone: Cairo
+- Ownership expiry warning: 30 days before expiry
+
+==================================================
+23. Demo Seed Data
+==================================================
+
+Create seed data for testing.
+
+Seed users:
+- Company Super Admin
+- Company Accountant
+- Partner Admin
+- Partner Accountant
+- Team Leader
+- Sales
+
+Seed partner:
+- Partner name: Demo Partner
+- Commission: 20%
+- Safety period: 14 days
+- Claim cycle: Auto every 2 days
+- Sales commission enabled: Yes
+- Sales commission: 5%
+- Sales payout cycle: Monthly
+- Customer ownership period: 3 Years
+
+Seed packages:
+1. Basic Package
+- Item price before tax: 1000
+- Tax percentage: 14
+- Final price after tax: 1140
+- Duration: 1 year
+- Active
+
+2. Pro Package
+- Item price before tax: 2000
+- Tax percentage: 14
+- Final price after tax: 2280
+- Duration: 1 year
+- Active
+
+3. Add-on Package
+- Item price before tax: 500
+- Tax percentage: 14
+- Final price after tax: 570
+- Duration: 1 year
+- Active
+
+==================================================
+24. Acceptance Criteria
+==================================================
+
+The portal is considered complete when the following works:
+
+1. User can log in by role.
+2. Menus change according to role.
+3. Company Super Admin can create partner and Partner Admin.
+4. Partner Admin can create Partner Accountant, Team Leader, and Sales.
+5. Sales can create a request through the 4-step wizard.
+6. Tax Card Number validation works.
+7. Duplicate active request prevention works.
+8. Customer 360 Profile is created after Step 2 Save and Continue.
+9. Draft SR is created after Step 2.
+10. Request becomes New Request only after package selection and collection confirmation.
+11. Main company can receive, activate, reject, and reopen requests.
+12. Activated request starts customer ownership.
+13. Customer ownership period is visible in Customer 360 Profile and Partner Profile.
+14. Recurring commissions are generated for eligible transactions during ownership period.
+15. No new partner commission is generated after ownership expiry.
+16. Customer returns to company after ownership expiry.
+17. Old partner keeps historical visibility only.
+18. Payment status is tracked separately from order status.
+19. Partner commission status is tracked separately.
+20. Sales commission status is tracked separately.
+21. Partner net amount due to company is calculated correctly.
+22. Sales commission is paid separately by the main company.
+23. Safety period blocks partner commission claims until it ends.
+24. Auto/manual claim cycle works.
+25. Dashboards show role-based data.
+26. Reports can be filtered and exported.
+27. Excel import has upload, preview, validation, and confirm steps.
+28. Audit log records important actions.
+29. Notifications are created for key events.
+30. Arabic RTL and English LTR are supported.
+
+Build the system in a clean, practical, and complete way.
+Prioritize correct business flow, clear permissions, and accurate financial separation.
+```
