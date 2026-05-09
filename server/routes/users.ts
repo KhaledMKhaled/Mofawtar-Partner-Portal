@@ -141,6 +141,15 @@ usersRouter.patch("/:id", requirePerm("users:edit"), async (req, res) => {
     return res.status(403).json({ error: "forbidden" });
 
   const d = parsed.data;
+
+  // Prevent any user from changing their own role or deactivating themselves.
+  if (cu.id === id) {
+    if (d.roleId !== undefined && d.roleId !== old.roleId)
+      return res.status(403).json({ error: "cannot_change_own_role" });
+    if (d.status !== undefined && d.status !== old.status)
+      return res.status(403).json({ error: "cannot_change_own_status" });
+  }
+
   // If a new roleId is being set, validate scope and partner-admin restrictions
   if (d.roleId !== undefined) {
     const [newRole] = await db.select().from(roles).where(eq(roles.id, d.roleId));

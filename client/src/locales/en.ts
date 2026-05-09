@@ -145,6 +145,8 @@ export const en = {
     teamLeader: "Team leader",
     none: "—",
     selectPartnerFirst: "Select a partner first",
+    cannotEditOwnRole: "You cannot change your own role",
+    cannotEditOwnStatus: "You cannot change your own account status",
   },
   roles: {
     title: "Roles & Permissions",

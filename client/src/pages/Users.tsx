@@ -141,6 +141,8 @@ export function UsersPage() {
   const showTeamLeader = selectedRole?.key === "sales" && !!tlPartnerId;
   // If the current user is a team leader they can only assign themselves.
   const isTeamLeader = me?.roleKey === "team_leader";
+  // Self-edit protection: cannot change own role or status.
+  const isSelf = !!editing && editing.id === me?.id;
   const canCreate = can(me, "users:create");
   const canEdit = can(me, "users:edit");
 
@@ -227,8 +229,8 @@ export function UsersPage() {
               autoComplete="new-password"
               onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </Field>
-          <Field label={t("common.role")} required>
-            <select className="input" value={form.roleId}
+          <Field label={t("common.role")} required hint={isSelf ? t("users.cannotEditOwnRole") : undefined}>
+            <select className="input" value={form.roleId} disabled={isSelf}
               onChange={(e) => {
                 const newRoleId = Number(e.target.value);
                 const newRole = availableRoles.find((r) => r.id === newRoleId);
@@ -270,8 +272,8 @@ export function UsersPage() {
               )}
             </Field>
           )}
-          <Field label={t("common.status")}>
-            <select className="input" value={form.status}
+          <Field label={t("common.status")} hint={isSelf ? t("users.cannotEditOwnStatus") : undefined}>
+            <select className="input" value={form.status} disabled={isSelf}
               onChange={(e) => setForm({ ...form, status: asUserStatus(e.target.value) })}>
               <option value="active">{t("common.active")}</option>
               <option value="inactive">{t("common.inactive")}</option>

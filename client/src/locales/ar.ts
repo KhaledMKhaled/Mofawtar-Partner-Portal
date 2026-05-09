@@ -147,6 +147,8 @@ export const ar: Translations = {
     teamLeader: "قائد الفريق",
     none: "—",
     selectPartnerFirst: "اختر الشريك أولاً",
+    cannotEditOwnRole: "لا يمكنك تغيير دورك الخاص",
+    cannotEditOwnStatus: "لا يمكنك تغيير حالة حسابك",
   },
   roles: {
     title: "الأدوار والصلاحيات",
