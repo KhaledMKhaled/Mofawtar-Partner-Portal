@@ -18,6 +18,28 @@ rolesRouter.get("/meta", requirePerm("roles:view"), (_req, res) => {
   res.json({ modules: MODULES, actions: ACTIONS });
 });
 
+// Returns only the roles the current user is allowed to assign when creating
+// a new user. Requires users:create instead of roles:view so partner_admin
+// and team_leader accounts can populate the role dropdown.
+const PARTNER_ADMIN_ASSIGNABLE_ROLES = new Set([
+  "partner_accountant",
+  "team_leader",
+  "sales",
+]);
+rolesRouter.get("/assignable", requirePerm("users:create"), async (req, res) => {
+  const cu = getUser(req)!;
+  const rows = await db
+    .select({ id: roles.id, key: roles.key, nameEn: roles.nameEn, nameAr: roles.nameAr, scope: roles.scope })
+    .from(roles)
+    .orderBy(roles.id);
+  const filtered = rows.filter((r) => {
+    if (cu.roleKey === "partner_admin") return PARTNER_ADMIN_ASSIGNABLE_ROLES.has(r.key);
+    if (cu.roleKey === "team_leader") return r.key === "sales";
+    return true;
+  });
+  res.json(filtered);
+});
+
 rolesRouter.get("/", requirePerm("roles:view"), async (_req, res) => {
   const rows = await db
     .select({

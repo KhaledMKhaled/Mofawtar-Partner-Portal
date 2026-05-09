@@ -44,12 +44,6 @@ interface UserForm {
   status: UserStatus;
 }
 
-const PARTNER_ADMIN_ASSIGNABLE_ROLES = new Set([
-  "partner_accountant",
-  "team_leader",
-  "sales",
-]);
-
 function asUserStatus(v: string): UserStatus {
   return v === "inactive" ? "inactive" : "active";
 }
@@ -71,7 +65,7 @@ export function UsersPage() {
   const qc = useQueryClient();
 
   const usersQ = useQuery({ queryKey: ["users"], queryFn: () => api<User[]>("/api/users") });
-  const rolesQ = useQuery({ queryKey: ["roles"], queryFn: () => api<Role[]>("/api/roles") });
+  const rolesQ = useQuery({ queryKey: ["assignable-roles"], queryFn: () => api<Role[]>("/api/roles/assignable") });
   // Load partners for any user without a fixed partner (i.e. company-scoped roles)
   const partnersQ = useQuery({
     queryKey: ["partners"],
@@ -103,11 +97,8 @@ export function UsersPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); },
   });
 
-  const availableRoles = (rolesQ.data || []).filter((r) => {
-    // Partner Admin may only assign Partner Accountant / Team Leader / Sales.
-    if (me?.roleKey === "partner_admin") return PARTNER_ADMIN_ASSIGNABLE_ROLES.has(r.key);
-    return true;
-  });
+  // Server already filters roles to what the current user may assign.
+  const availableRoles = rolesQ.data || [];
 
   const onNew = () => {
     setEditing(null);
