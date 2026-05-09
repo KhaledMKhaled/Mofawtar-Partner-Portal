@@ -169,6 +169,124 @@ export const sessions = pgTable("session", {
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
 
+export const customers = pgTable(
+  "customers",
+  {
+    id: serial("id").primaryKey(),
+    taxCardNumber: varchar("tax_card_number", { length: 30 }).notNull().unique(),
+    name: varchar("name", { length: 250 }).notNull(),
+    contactPerson: varchar("contact_person", { length: 200 }),
+    contactPhone: varchar("contact_phone", { length: 50 }),
+    email: varchar("email", { length: 200 }),
+    address: text("address"),
+    taxOffice: varchar("tax_office", { length: 200 }),
+    businessActivity: varchar("business_activity", { length: 200 }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    taxIdx: uniqueIndex("customers_tax_idx").on(t.taxCardNumber),
+    nameIdx: index("customers_name_idx").on(t.name),
+  })
+);
+
+export const customerOwnership = pgTable(
+  "customer_ownership",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    partnerId: integer("partner_id").references(() => partners.id),
+    startDate: timestamp("start_date", { mode: "date" }).notNull(),
+    endDate: timestamp("end_date", { mode: "date" }).notNull(),
+    status: varchar("status", { length: 30 }).notNull().default("active"),
+    transferredFromPartnerId: integer("transferred_from_partner_id"),
+    reason: text("reason"),
+    createdByUserId: integer("created_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    custIdx: index("ownership_customer_idx").on(t.customerId),
+    partnerIdx: index("ownership_partner_idx").on(t.partnerId),
+    statusIdx: index("ownership_status_idx").on(t.status),
+  })
+);
+
+export const requests = pgTable(
+  "requests",
+  {
+    id: serial("id").primaryKey(),
+    srNumber: varchar("sr_number", { length: 80 }).notNull().unique(),
+    customerId: integer("customer_id").notNull().references(() => customers.id),
+    partnerId: integer("partner_id").notNull().references(() => partners.id),
+    salesUserId: integer("sales_user_id").references(() => users.id),
+    teamLeaderId: integer("team_leader_id").references(() => users.id),
+    packageId: integer("package_id").references(() => packages.id),
+    operationType: varchar("operation_type", { length: 40 }),
+    realReceiptNumber: varchar("real_receipt_number", { length: 80 }),
+    paymentStatus: varchar("payment_status", { length: 40 })
+      .notNull()
+      .default("pending_collection_confirmation"),
+    status: varchar("status", { length: 30 }).notNull().default("draft_sr"),
+    rejectionReason: text("rejection_reason"),
+    activatedAt: timestamp("activated_at"),
+    submittedAt: timestamp("submitted_at"),
+    createdByUserId: integer("created_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    statusIdx: index("requests_status_idx").on(t.status),
+    customerIdx: index("requests_customer_idx").on(t.customerId),
+    partnerIdx: index("requests_partner_idx").on(t.partnerId),
+    salesIdx: index("requests_sales_idx").on(t.salesUserId),
+  })
+);
+
+export const requestStatusHistory = pgTable("request_status_history", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+  fromStatus: varchar("from_status", { length: 30 }),
+  toStatus: varchar("to_status", { length: 30 }).notNull(),
+  reason: text("reason"),
+  changedByUserId: integer("changed_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const requestReassignments = pgTable("request_reassignments", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+  fromSalesUserId: integer("from_sales_user_id"),
+  toSalesUserId: integer("to_sales_user_id"),
+  reason: text("reason"),
+  byUserId: integer("by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 60 }).notNull(),
+    titleEn: varchar("title_en", { length: 250 }).notNull(),
+    titleAr: varchar("title_ar", { length: 250 }).notNull(),
+    bodyEn: text("body_en"),
+    bodyAr: text("body_ar"),
+    entityType: varchar("entity_type", { length: 40 }),
+    entityId: varchar("entity_id", { length: 60 }),
+    linkPath: varchar("link_path", { length: 200 }),
+    readAt: timestamp("read_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({ userIdx: index("notifications_user_idx").on(t.userId, t.readAt) })
+);
+
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
+export type Ownership = typeof customerOwnership.$inferSelect;
+export type RequestRow = typeof requests.$inferSelect;
+
 export type Partner = typeof partners.$inferSelect;
 export type NewPartner = typeof partners.$inferInsert;
 export type User = typeof users.$inferSelect;

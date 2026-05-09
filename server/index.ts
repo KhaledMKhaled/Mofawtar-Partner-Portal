@@ -11,7 +11,12 @@ import { usersRouter } from "./routes/users.js";
 import { rolesRouter } from "./routes/roles.js";
 import { packagesRouter } from "./routes/packages.js";
 import { settingsRouter } from "./routes/settings.js";
+import { customersRouter } from "./routes/customers.js";
+import { requestsRouter } from "./routes/requests.js";
+import { ownershipRouter } from "./routes/ownership.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { ensureSchema, runSeed } from "./seed.js";
+import { markExpiredOwnerships } from "./ownership.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +57,10 @@ app.use("/api/users", usersRouter);
 app.use("/api/roles", rolesRouter);
 app.use("/api/packages", packagesRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/customers", customersRouter);
+app.use("/api/requests", requestsRouter);
+app.use("/api/ownership", ownershipRouter);
+app.use("/api/notifications", notificationsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("unhandled error", err);
@@ -85,6 +94,13 @@ async function start() {
   app.listen(PORT, HOST, () => {
     console.log(`Mofawter Partner Portal running on http://${HOST}:${PORT}`);
   });
+
+  // Daily ownership housekeeping. Runs once on boot, then every 24h.
+  markExpiredOwnerships().catch((e) => console.error("ownership housekeep failed", e));
+  setInterval(
+    () => markExpiredOwnerships().catch((e) => console.error("ownership housekeep failed", e)),
+    24 * 60 * 60 * 1000,
+  );
 }
 
 start().catch((e) => {

@@ -8,10 +8,17 @@ import { ResetPasswordPage } from "./pages/ResetPassword";
 import { ChangePasswordPage } from "./pages/ChangePassword";
 import { DashboardPage } from "./pages/Dashboard";
 import { PartnersPage } from "./pages/Partners";
+import { PartnerDetailPage } from "./pages/PartnerDetail";
 import { UsersPage } from "./pages/Users";
 import { RolesPage } from "./pages/Roles";
 import { PackagesPage } from "./pages/Packages";
 import { SettingsPage } from "./pages/Settings";
+import { CustomersPage } from "./pages/Customers";
+import { Customer360Page } from "./pages/Customer360";
+import { RequestsPage } from "./pages/Requests";
+import { RequestDetailPage } from "./pages/RequestDetail";
+import { OwnershipPage } from "./pages/Ownership";
+import { NotificationsPage } from "./pages/Notifications";
 import { PlaceholderPage } from "./pages/Placeholder";
 import type { Module } from "@shared/permissions";
 
@@ -56,19 +63,23 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="/account/password" element={<ChangePasswordPage />} />
         <Route path="/partners" element={<Gate module="partners"><PartnersPage /></Gate>} />
+        <Route path="/partners/:id" element={<Gate module="partners"><PartnerDetailPage /></Gate>} />
         <Route path="/users" element={<Gate module="users"><UsersPage /></Gate>} />
         <Route path="/roles" element={<Gate module="roles"><RolesPage /></Gate>} />
         <Route path="/packages" element={<Gate module="packages"><PackagesPage /></Gate>} />
         <Route path="/settings" element={<Gate module="settings"><SettingsPage /></Gate>} />
-        <Route path="/customers" element={<Gate module="customers"><PlaceholderPage moduleKey="customers" /></Gate>} />
-        <Route path="/requests" element={<Gate module="requests"><PlaceholderPage moduleKey="requests" /></Gate>} />
+        <Route path="/customers" element={<Gate module="customers"><CustomersPage /></Gate>} />
+        <Route path="/customers/:id" element={<Gate module="customers"><Customer360Page /></Gate>} />
+        <Route path="/requests" element={<Gate module="requests"><RequestsPage /></Gate>} />
+        <Route path="/requests/:id" element={<Gate module="requests"><RequestDetailPage /></Gate>} />
+        <Route path="/ownership" element={<Gate module="ownership"><OwnershipPage /></Gate>} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/payments" element={<Gate module="payments"><PlaceholderPage moduleKey="payments" /></Gate>} />
         <Route path="/partner-commissions" element={<Gate module="partner_commissions"><PlaceholderPage moduleKey="partner_commissions" /></Gate>} />
         <Route path="/sales-commissions" element={<Gate module="sales_commissions"><PlaceholderPage moduleKey="sales_commissions" /></Gate>} />
         <Route path="/claims" element={<Gate module="claims"><PlaceholderPage moduleKey="claims" /></Gate>} />
         <Route path="/payout-batches" element={<Gate module="payout_batches"><PlaceholderPage moduleKey="payout_batches" /></Gate>} />
         <Route path="/settlements" element={<Gate module="settlements"><PlaceholderPage moduleKey="settlements" /></Gate>} />
-        <Route path="/ownership" element={<Gate module="ownership"><PlaceholderPage moduleKey="ownership" /></Gate>} />
         <Route path="/reports" element={<Gate module="reports"><PlaceholderPage moduleKey="reports" /></Gate>} />
         <Route path="/audit-log" element={<Gate module="audit_log"><PlaceholderPage moduleKey="audit_log" /></Gate>} />
         <Route path="*" element={<Navigate to="/" replace />} />

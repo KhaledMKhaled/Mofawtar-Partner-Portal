@@ -140,6 +140,99 @@ export async function ensureSchema() {
       used_at TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS customers (
+      id SERIAL PRIMARY KEY,
+      tax_card_number VARCHAR(30) NOT NULL UNIQUE,
+      name VARCHAR(250) NOT NULL,
+      contact_person VARCHAR(200),
+      contact_phone VARCHAR(50),
+      email VARCHAR(200),
+      address TEXT,
+      tax_office VARCHAR(200),
+      business_activity VARCHAR(200),
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_tax_idx ON customers(tax_card_number);
+    CREATE INDEX IF NOT EXISTS customers_name_idx ON customers(name);
+
+    CREATE TABLE IF NOT EXISTS customer_ownership (
+      id SERIAL PRIMARY KEY,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      partner_id INTEGER REFERENCES partners(id),
+      start_date TIMESTAMP NOT NULL,
+      end_date TIMESTAMP NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'active',
+      transferred_from_partner_id INTEGER,
+      reason TEXT,
+      created_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ownership_customer_idx ON customer_ownership(customer_id);
+    CREATE INDEX IF NOT EXISTS ownership_partner_idx ON customer_ownership(partner_id);
+    CREATE INDEX IF NOT EXISTS ownership_status_idx ON customer_ownership(status);
+
+    CREATE TABLE IF NOT EXISTS requests (
+      id SERIAL PRIMARY KEY,
+      sr_number VARCHAR(80) NOT NULL UNIQUE,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      partner_id INTEGER NOT NULL REFERENCES partners(id),
+      sales_user_id INTEGER REFERENCES users(id),
+      team_leader_id INTEGER REFERENCES users(id),
+      package_id INTEGER REFERENCES packages(id),
+      operation_type VARCHAR(40),
+      real_receipt_number VARCHAR(80),
+      payment_status VARCHAR(40) NOT NULL DEFAULT 'pending_collection_confirmation',
+      status VARCHAR(30) NOT NULL DEFAULT 'draft_sr',
+      rejection_reason TEXT,
+      activated_at TIMESTAMP,
+      submitted_at TIMESTAMP,
+      created_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS requests_status_idx ON requests(status);
+    CREATE INDEX IF NOT EXISTS requests_customer_idx ON requests(customer_id);
+    CREATE INDEX IF NOT EXISTS requests_partner_idx ON requests(partner_id);
+    CREATE INDEX IF NOT EXISTS requests_sales_idx ON requests(sales_user_id);
+
+    CREATE TABLE IF NOT EXISTS request_status_history (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      from_status VARCHAR(30),
+      to_status VARCHAR(30) NOT NULL,
+      reason TEXT,
+      changed_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS request_reassignments (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      from_sales_user_id INTEGER,
+      to_sales_user_id INTEGER,
+      reason TEXT,
+      by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(60) NOT NULL,
+      title_en VARCHAR(250) NOT NULL,
+      title_ar VARCHAR(250) NOT NULL,
+      body_en TEXT,
+      body_ar TEXT,
+      entity_type VARCHAR(40),
+      entity_id VARCHAR(60),
+      link_path VARCHAR(200),
+      read_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, read_at);
   `);
 }
 
