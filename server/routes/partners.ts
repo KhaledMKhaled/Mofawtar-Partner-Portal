@@ -13,13 +13,21 @@ function isPgError(e: unknown): e is { code: string; detail?: string } {
     typeof (e as { code: unknown }).code === "string";
 }
 
-partnersRouter.get("/", requirePerm("partners:view"), async (_req, res) => {
+partnersRouter.get("/", requirePerm("partners:view"), async (req, res) => {
+  const cu = getUser(req)!;
+  if (cu.partnerId) {
+    const rows = await db.select().from(partners).where(eq(partners.id, cu.partnerId));
+    return res.json(rows);
+  }
   const list = await db.select().from(partners).orderBy(desc(partners.createdAt));
   res.json(list);
 });
 
 partnersRouter.get("/:id", requirePerm("partners:view"), async (req, res) => {
-  const [p] = await db.select().from(partners).where(eq(partners.id, Number(req.params.id)));
+  const cu = getUser(req)!;
+  const id = Number(req.params.id);
+  if (cu.partnerId && cu.partnerId !== id) return res.status(403).json({ error: "forbidden" });
+  const [p] = await db.select().from(partners).where(eq(partners.id, id));
   if (!p) return res.status(404).json({ error: "not_found" });
   res.json(p);
 });

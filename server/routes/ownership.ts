@@ -45,6 +45,8 @@ ownershipRouter.get("/", requirePerm("ownership:view"), async (req, res) => {
 // Per-partner ownership summary used by Partner profile.
 ownershipRouter.get("/partner/:id/summary", requirePerm("partners:view"), async (req, res) => {
   const partnerId = Number(req.params.id);
+  const cu = getUser(req)!;
+  if (cu.partnerId && cu.partnerId !== partnerId) return res.status(403).json({ error: "forbidden" });
   const owned = await db
     .select({
       id: customerOwnership.id,
