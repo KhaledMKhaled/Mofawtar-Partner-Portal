@@ -48,14 +48,18 @@ export function SettingsPage() {
         <div className="form-row">
           <Field label={t("settings.language")}>
             <select className="input" value={String(form.language ?? "ar")} disabled={!canEdit}
-              onChange={(e) => setForm({ ...form, language: e.target.value })}>
+              onChange={(e) => {
+                const lang = e.target.value;
+                const dir = lang === "en" ? "ltr" : "rtl";
+                setForm({ ...form, language: lang, direction: dir });
+              }}>
               <option value="ar">العربية</option>
               <option value="en">English</option>
             </select>
           </Field>
           <Field label={t("settings.direction")}>
-            <select className="input" value={String(form.direction ?? "rtl")} disabled={!canEdit}
-              onChange={(e) => setForm({ ...form, direction: e.target.value })}>
+            <select className="input" value={String(form.direction ?? "rtl")} disabled
+              onChange={() => {}}>
               <option value="rtl">RTL</option>
               <option value="ltr">LTR</option>
             </select>
