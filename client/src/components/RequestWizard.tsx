@@ -78,6 +78,8 @@ export interface WizardInitialDraft {
   taxCardNumber: string;
   customerName: string;
   partnerId: number | null;
+  salesUserId?: number | null;
+  salesUserName?: string | null;
 }
 
 export function RequestWizard({
@@ -121,16 +123,19 @@ export function RequestWizard({
       setCustomer({ ...blankCustomer, taxCardNumber: initialDraft.taxCardNumber ?? "", name: initialDraft.customerName ?? "" });
       setWizardPartnerId(initialDraft.partnerId);
       setDraft({ customer: { ...blankCustomer, taxCardNumber: initialDraft.taxCardNumber ?? "", name: initialDraft.customerName ?? "" }, request: { id: initialDraft.requestId, srNumber: initialDraft.srNumber } });
+      setSalesUserId(initialDraft.salesUserId ?? null);
+      setSalesUserName(initialDraft.salesUserName ?? null);
     } else {
       setStep(1);
       setTax("");
       setCustomer(blankCustomer);
       setWizardPartnerId(null);
       setDraft(null);
+      setSalesUserId(null);
+      setSalesUserName(null);
     }
     setLookup(null);
     setLookupErr(null);
-    setSalesUserId(null);
     setPackageId(null);
     setOperationType("");
     setRealReceiptNumber("");

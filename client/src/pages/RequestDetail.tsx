@@ -348,6 +348,8 @@ export function RequestDetailPage() {
           taxCardNumber: request.taxCardNumber ?? "",
           customerName: request.customerName ?? "",
           partnerId: request.partnerId,
+          salesUserId: request.salesUserId,
+          salesUserName: request.salesName,
         }}
       />
     </div>
