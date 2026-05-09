@@ -157,5 +157,28 @@ partnersRouter.patch("/:id", requirePerm("partners:edit"), async (req, res) => {
     newValue: updated,
     partnerId: id,
   });
+
+  // Cascade: when partner is deactivated, deactivate all its linked users.
+  if (old.status === "active" && updated.status === "inactive") {
+    const affectedUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.partnerId, id));
+    if (affectedUsers.length > 0) {
+      await db
+        .update(users)
+        .set({ status: "inactive", updatedAt: new Date() })
+        .where(eq(users.partnerId, id));
+      await audit({
+        userId: cu.id,
+        action: "partner.users_deactivated",
+        entityType: "partner",
+        entityId: id,
+        newValue: { deactivatedUserIds: affectedUsers.map((u) => u.id) },
+        partnerId: id,
+      });
+    }
+  }
+
   res.json(updated);
 });
