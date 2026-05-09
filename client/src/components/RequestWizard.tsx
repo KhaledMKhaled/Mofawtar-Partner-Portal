@@ -500,9 +500,6 @@ export function RequestWizard({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Written summary */}
               <div>
-                <h4 className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">
-                  {t("wizard.step4.writtenSummary")}
-                </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Summary label={t("wizard.srNumber")} value={draft.request.srNumber} mono />
                   <Summary label={t("wizard.taxCard")} value={tax} mono />
@@ -519,10 +516,7 @@ export function RequestWizard({
 
               {/* POS receipt */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
-                    {t("wizard.step4.posReceipt")}
-                  </h4>
+                <div className="flex items-center justify-end mb-3">
                   <button
                     type="button"
                     className="btn-outline btn-xs flex items-center gap-1 text-xs"
