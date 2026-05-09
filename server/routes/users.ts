@@ -194,7 +194,7 @@ usersRouter.get("/sales-assignable", requirePerm("requests:create"), async (req,
   res.json(rows);
 });
 
-usersRouter.get("/team-leaders", requirePerm("users:view"), async (req, res) => {
+usersRouter.get("/team-leaders", requirePerm("users:create"), async (req, res) => {
   const cu = getUser(req)!;
   const partnerId = cu.partnerId ?? Number(req.query.partnerId);
   if (!partnerId) return res.json([]);
