@@ -272,6 +272,10 @@ export function RequestWizard({
       {step === 1 && (
         <div>
           <p className="text-sm text-muted mb-3">{t("wizard.step1.intro")}</p>
+          <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex gap-3 items-start">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+            <div className="font-semibold leading-relaxed">{t("wizard.step1.pendingNotice")}</div>
+          </div>
           <Field label={t("wizard.taxCard")} required hint={t("wizard.taxCardHint")}>
             <div className="relative">
               <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />

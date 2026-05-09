@@ -305,7 +305,10 @@ export const en = {
       3: "Package & payment",
       4: "Review & submit",
     },
-    step1: { intro: "Enter the customer's tax card to check ownership and avoid duplicates." },
+    step1: {
+      intro: "Enter the customer's tax card to check ownership and avoid duplicates.",
+      pendingNotice: "If the customer already exists and has a pending request, creating a new request will be blocked.",
+    },
     step2: { intro: "Confirm or update the customer profile." },
     step3: { intro: "Pick the package, operation type, and confirm collection." },
     step4: { intro: "Review the details below before submitting." },
