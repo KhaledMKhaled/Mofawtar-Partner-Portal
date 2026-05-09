@@ -202,9 +202,9 @@ export function PackagesPage() {
           </Field>
           <Field label={t("packages.type")}>
             <select className="input" value={form.packageType} onChange={(e) => setForm({ ...form, packageType: e.target.value })}>
-              <option value="subscription">Subscription</option>
-              <option value="addon">Add-on</option>
-              <option value="other">Other</option>
+              <option value="subscription">{t("packages.typeSubscription")}</option>
+              <option value="addon">{t("packages.typeAddon")}</option>
+              <option value="other">{t("packages.typeOther")}</option>
             </select>
           </Field>
           <Field label={t("common.description")} className="md:col-span-2">
@@ -309,7 +309,7 @@ function CommissionRulesModal({
     active: true,
   });
   const create = useMutation({
-    mutationFn: (data: any) => api(`/api/packages/${pkg!.id}/commission-rules`, { method: "POST", json: data }),
+    mutationFn: (data: typeof form) => api(`/api/packages/${pkg!.id}/commission-rules`, { method: "POST", json: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["pkg-rules", pkg?.id] }),
   });
   const remove = useMutation({
@@ -345,7 +345,7 @@ function CommissionRulesModal({
             {rulesQ.data?.map((r) => (
               <tr key={r.id}>
                 <td>{r.partnerName}</td>
-                <td>{t(`operationTypes.${r.operationType}` as any)}</td>
+                <td>{t([`operationTypes.${r.operationType}`, r.operationType] as const)}</td>
                 <td>{Number(r.partnerCommissionPct)}%</td>
                 <td>{Number(r.salesCommissionPct)}%</td>
                 <td className="text-end">
@@ -373,7 +373,7 @@ function CommissionRulesModal({
           <select className="input" value={form.operationType}
             onChange={(e) => setForm({ ...form, operationType: e.target.value })}>
             <option value="">—</option>
-            {opsQ.data?.map((o) => <option key={o} value={o}>{t(`operationTypes.${o}` as any)}</option>)}
+            {opsQ.data?.map((o) => <option key={o} value={o}>{t([`operationTypes.${o}`, o] as const)}</option>)}
           </select>
         </Field>
         <Field label={t("partners.partnerCommissionPct")}>

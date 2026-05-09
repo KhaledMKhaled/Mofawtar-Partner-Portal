@@ -42,6 +42,9 @@ export const en = {
     createdAt: "Created at",
     enabled: "Enabled",
     disabled: "Disabled",
+    permissionDenied: "You do not have permission to view this page.",
+    minChars: "At least {{n}} characters",
+    leaveBlankToKeep: "Leave blank to keep current",
   },
   nav: {
     dashboard: "Dashboard",
@@ -142,6 +145,8 @@ export const en = {
     nameEn: "Name (English)",
     nameAr: "Name (Arabic)",
     key: "Key",
+    module: "Module",
+    permissionsCount: "{{count}} permissions",
   },
   packages: {
     title: "Packages",
@@ -159,6 +164,9 @@ export const en = {
     addRule: "Add rule",
     defaultPartnerCommissionPct: "Default partner commission %",
     defaultSalesCommissionPct: "Default sales commission %",
+    typeSubscription: "Subscription",
+    typeAddon: "Add-on",
+    typeOther: "Other",
   },
   settings: {
     title: "Settings",

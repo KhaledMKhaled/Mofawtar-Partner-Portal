@@ -1,10 +1,17 @@
+export interface ApiErrorBody {
+  error?: string;
+  [k: string]: unknown;
+}
+
 export class ApiError extends Error {
-  constructor(public status: number, public body: any) {
-    super(body?.error || `HTTP ${status}`);
+  constructor(public status: number, public body: ApiErrorBody | string | null) {
+    super(
+      (body && typeof body === "object" && body.error) || `HTTP ${status}`,
+    );
   }
 }
 
-export async function api<T = any>(
+export async function api<T = unknown>(
   url: string,
   opts: RequestInit & { json?: unknown } = {}
 ): Promise<T> {
@@ -17,10 +24,14 @@ export async function api<T = any>(
   const res = await fetch(url, { ...opts, headers, body, credentials: "include" });
   const text = await res.text();
   const parsed = text ? safeJson(text) : null;
-  if (!res.ok) throw new ApiError(res.status, parsed);
+  if (!res.ok) {
+    const errBody: ApiErrorBody | string | null =
+      parsed && typeof parsed === "object" ? (parsed as ApiErrorBody) : (parsed as string | null);
+    throw new ApiError(res.status, errBody);
+  }
   return parsed as T;
 }
 
-function safeJson(text: string) {
+function safeJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
 }

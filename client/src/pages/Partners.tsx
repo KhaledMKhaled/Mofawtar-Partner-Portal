@@ -56,8 +56,9 @@ export function PartnersPage() {
   const [form, setForm] = useState(blank);
   const [error, setError] = useState<string | null>(null);
 
+  type PartnerInput = Partial<typeof blank>;
   const create = useMutation({
-    mutationFn: (data: any) => api("/api/partners", { method: "POST", json: data }),
+    mutationFn: (data: PartnerInput) => api("/api/partners", { method: "POST", json: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["partners"] });
       setOpen(false);
@@ -65,7 +66,7 @@ export function PartnersPage() {
   });
 
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) =>
+    mutationFn: ({ id, data }: { id: number; data: PartnerInput }) =>
       api(`/api/partners/${id}`, { method: "PATCH", json: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["partners"] });
@@ -85,14 +86,14 @@ export function PartnersPage() {
       ...blank,
       name: p.name,
       code: p.code,
-      status: p.status as any,
+      status: p.status === "inactive" ? "inactive" : "active",
       partnerCommissionPct: Number(p.partnerCommissionPct),
       safetyPeriodDays: p.safetyPeriodDays,
-      claimCycleType: p.claimCycleType as any,
+      claimCycleType: p.claimCycleType === "auto" ? "auto" : "manual",
       salesCommissionEnabled: p.salesCommissionEnabled,
       salesCommissionPct: Number(p.salesCommissionPct),
       ownershipPeriodValue: p.ownershipPeriodValue,
-      ownershipPeriodUnit: p.ownershipPeriodUnit as any,
+      ownershipPeriodUnit: p.ownershipPeriodUnit === "months" ? "months" : "years",
     });
     setError(null);
     setOpen(true);
@@ -107,8 +108,9 @@ export function PartnersPage() {
       } else {
         await create.mutateAsync(form);
       }
-    } catch (e: any) {
-      setError(e?.body?.error || e?.message || "failed");
+    } catch (e) {
+      const err = e as { body?: { error?: string }; message?: string };
+      setError(err?.body?.error || err?.message || "failed");
     }
   };
 
@@ -210,7 +212,7 @@ export function PartnersPage() {
               <input className="input" value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </Field>
             <Field label={t("common.status")}>
-              <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
+              <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value === "inactive" ? "inactive" : "active" })}>
                 <option value="active">{t("common.active")}</option>
                 <option value="inactive">{t("common.inactive")}</option>
               </select>
@@ -233,7 +235,7 @@ export function PartnersPage() {
             </Field>
             <Field label={t("partners.claimCycleType")}>
               <select className="input" value={form.claimCycleType}
-                onChange={(e) => setForm({ ...form, claimCycleType: e.target.value as any })}>
+                onChange={(e) => setForm({ ...form, claimCycleType: e.target.value === "auto" ? "auto" : "manual" })}>
                 <option value="manual">{t("partners.claimCycleManual")}</option>
                 <option value="auto">{t("partners.claimCycleAuto")}</option>
               </select>
@@ -257,7 +259,7 @@ export function PartnersPage() {
             <Field label={t("partners.salesPayoutCycle")}>
               <select className="input" value={form.salesPayoutCycle}
                 disabled={!form.salesCommissionEnabled}
-                onChange={(e) => setForm({ ...form, salesPayoutCycle: e.target.value as any })}>
+                onChange={(e) => setForm({ ...form, salesPayoutCycle: e.target.value === "quarterly" ? "quarterly" : "monthly" })}>
                 <option value="monthly">{t("partners.monthly")}</option>
                 <option value="quarterly">{t("partners.quarterly")}</option>
               </select>
@@ -273,7 +275,7 @@ export function PartnersPage() {
             </Field>
             <Field label="—">
               <select className="input" value={form.ownershipPeriodUnit}
-                onChange={(e) => setForm({ ...form, ownershipPeriodUnit: e.target.value as any })}>
+                onChange={(e) => setForm({ ...form, ownershipPeriodUnit: e.target.value === "months" ? "months" : "years" })}>
                 <option value="years">{t("partners.years")}</option>
                 <option value="months">{t("partners.months")}</option>
               </select>
@@ -291,7 +293,7 @@ export function PartnersPage() {
                 <input type="email" dir="ltr" className="input" value={form.adminEmail}
                   onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
               </Field>
-              <Field label={t("partners.adminPassword")} required hint="≥ 8 chars">
+              <Field label={t("partners.adminPassword")} required hint={t("common.minChars", { n: 8 })}>
                 <input type="password" dir="ltr" className="input" value={form.adminPassword}
                   autoComplete="new-password"
                   onChange={(e) => setForm({ ...form, adminPassword: e.target.value })} />

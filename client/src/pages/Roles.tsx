@@ -36,12 +36,13 @@ export function RolesPage() {
   const [form, setForm] = useState({ key: "", nameEn: "", nameAr: "", scope: "company" as "company" | "partner", permissions: [] as string[] });
   const [error, setError] = useState<string | null>(null);
 
+  type RoleInput = Partial<Omit<Role, "id" | "isSystem" | "userCount">>;
   const create = useMutation({
-    mutationFn: (data: any) => api("/api/roles", { method: "POST", json: data }),
+    mutationFn: (data: RoleInput) => api("/api/roles", { method: "POST", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["roles"] }); close(); },
   });
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => api(`/api/roles/${id}`, { method: "PATCH", json: data }),
+    mutationFn: ({ id, data }: { id: number; data: RoleInput }) => api(`/api/roles/${id}`, { method: "PATCH", json: data }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["roles"] }); close(); },
   });
 
@@ -64,8 +65,9 @@ export function RolesPage() {
       } else {
         await create.mutateAsync(form);
       }
-    } catch (e: any) {
-      setError(e?.body?.error || e?.message || "failed");
+    } catch (e) {
+      const err = e as { body?: { error?: string }; message?: string };
+      setError(err?.body?.error || err?.message || "failed");
     }
   };
 
@@ -119,7 +121,7 @@ export function RolesPage() {
                 </td>
                 <td><span className="pill-violet">{r.scope === "company" ? t("roles.company") : t("roles.partnerScope")}</span></td>
                 <td>{r.userCount}</td>
-                <td className="text-xs text-muted">{r.permissions?.length || 0} permissions</td>
+                <td className="text-xs text-muted">{t("roles.permissionsCount", { count: r.permissions?.length || 0 })}</td>
                 <td className="text-end">
                   {canEdit && (
                     <button className="btn-ghost" onClick={() => onEdit(r)}>
@@ -161,7 +163,7 @@ export function RolesPage() {
           </Field>
           <Field label={t("roles.scope")}>
             <select className="input" disabled={editing?.isSystem} value={form.scope}
-              onChange={(e) => setForm({ ...form, scope: e.target.value as any })}>
+              onChange={(e) => setForm({ ...form, scope: e.target.value === "partner" ? "partner" : "company" })}>
               <option value="company">{t("roles.company")}</option>
               <option value="partner">{t("roles.partnerScope")}</option>
             </select>
@@ -197,7 +199,7 @@ function PermissionsMatrix({
       <table className="table text-xs">
         <thead>
           <tr>
-            <th className="sticky start-0 bg-magnolia/60">Module</th>
+            <th className="sticky start-0 bg-magnolia/60">{t("roles.module")}</th>
             {meta.actions.map((a) => <th key={a} className="text-center">{a}</th>)}
           </tr>
         </thead>
@@ -210,7 +212,7 @@ function PermissionsMatrix({
                   className="text-violet-700 hover:underline"
                   onClick={() => onToggleModule(mod)}
                 >
-                  {t(`nav.${mod}` as any, { defaultValue: mod })}
+                  {t([`nav.${mod}`, mod] as const, { defaultValue: mod })}
                 </button>
               </td>
               {meta.actions.map((act) => {

@@ -10,8 +10,9 @@ export function SettingsPage() {
   const { t } = useTranslation();
   const { data: user } = useCurrentUser();
   const qc = useQueryClient();
-  const settingsQ = useQuery({ queryKey: ["settings"], queryFn: () => api<Record<string, any>>("/api/settings") });
-  const [form, setForm] = useState<Record<string, any>>({});
+  type SettingsMap = Record<string, unknown>;
+  const settingsQ = useQuery({ queryKey: ["settings"], queryFn: () => api<SettingsMap>("/api/settings") });
+  const [form, setForm] = useState<SettingsMap>({});
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export function SettingsPage() {
   }, [settingsQ.data]);
 
   const save = useMutation({
-    mutationFn: (data: any) => api("/api/settings", { method: "PUT", json: data }),
+    mutationFn: (data: SettingsMap) => api("/api/settings", { method: "PUT", json: data }),
     onSuccess: () => {
       setSaved(true);
       qc.invalidateQueries({ queryKey: ["settings"] });
@@ -35,33 +36,33 @@ export function SettingsPage() {
       <div className="stamp-card p-6 max-w-3xl">
         <div className="form-row">
           <Field label={t("settings.language")}>
-            <select className="input" value={form.language || "ar"} disabled={!canEdit}
+            <select className="input" value={String(form.language ?? "ar")} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, language: e.target.value })}>
               <option value="ar">العربية</option>
               <option value="en">English</option>
             </select>
           </Field>
           <Field label={t("settings.direction")}>
-            <select className="input" value={form.direction || "rtl"} disabled={!canEdit}
+            <select className="input" value={String(form.direction ?? "rtl")} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, direction: e.target.value })}>
               <option value="rtl">RTL</option>
               <option value="ltr">LTR</option>
             </select>
           </Field>
           <Field label={t("settings.currency")}>
-            <input className="input" value={form.currency || ""} disabled={!canEdit}
+            <input className="input" value={String(form.currency ?? "")} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, currency: e.target.value })} />
           </Field>
           <Field label={t("settings.timezone")}>
-            <input className="input" value={form.timezone || ""} disabled={!canEdit}
+            <input className="input" value={String(form.timezone ?? "")} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
           </Field>
           <Field label={t("settings.ownershipExpiryWarningDays")}>
-            <input type="number" min={1} className="input" value={form.ownership_expiry_warning_days || 30} disabled={!canEdit}
+            <input type="number" min={1} className="input" value={Number(form.ownership_expiry_warning_days ?? 30)} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, ownership_expiry_warning_days: Number(e.target.value) })} />
           </Field>
           <Field label={t("settings.commissionCalculationBase")}>
-            <select className="input" value={form.commission_calculation_base || "before_tax"} disabled={!canEdit}
+            <select className="input" value={String(form.commission_calculation_base ?? "before_tax")} disabled={!canEdit}
               onChange={(e) => setForm({ ...form, commission_calculation_base: e.target.value })}>
               <option value="before_tax">{t("settings.before_tax")}</option>
               <option value="after_tax">{t("settings.after_tax")}</option>

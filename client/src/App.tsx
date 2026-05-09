@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useCurrentUser, canModule } from "./hooks/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/Login";
@@ -28,10 +29,11 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function Gate({ module, children }: { module: Module; children: React.ReactNode }) {
   const { data: user } = useCurrentUser();
+  const { t } = useTranslation();
   if (!canModule(user, module)) {
     return (
       <div className="stamp-card p-10 text-center text-muted">
-        You do not have permission to view this page.
+        {t("common.permissionDenied")}
       </div>
     );
   }

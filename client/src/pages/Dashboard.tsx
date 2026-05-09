@@ -2,10 +2,15 @@ import { useTranslation } from "react-i18next";
 import { useCurrentUser } from "../hooks/useAuth";
 import { PageHeader } from "../components/AppShell";
 import { Building2, Users, PackageOpen, ShieldCheck, Receipt, Wallet, HandCoins, ClipboardList } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 
-const QUICK_TILES_BY_ROLE: Record<string, Array<{ key: string; icon: any; to: string }>> = {
+type IconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+interface QuickTile { key: string; icon: IconType; to: string }
+
+const QUICK_TILES_BY_ROLE: Record<string, QuickTile[]> = {
   company_super_admin: [
     { key: "partners", icon: Building2, to: "/partners" },
     { key: "users", icon: Users, to: "/users" },
@@ -44,17 +49,17 @@ export function DashboardPage() {
   // Phase 1 lightweight stats — uses the only data we currently have
   const partnersQ = useQuery({
     queryKey: ["partners-count"],
-    queryFn: () => api<any[]>("/api/partners").catch(() => [] as any[]),
+    queryFn: () => api<unknown[]>("/api/partners").catch(() => [] as unknown[]),
     enabled: !!user && (user.permissions || []).includes("partners:view"),
   });
   const usersQ = useQuery({
     queryKey: ["users-count"],
-    queryFn: () => api<any[]>("/api/users").catch(() => [] as any[]),
+    queryFn: () => api<unknown[]>("/api/users").catch(() => [] as unknown[]),
     enabled: !!user && (user.permissions || []).includes("users:view"),
   });
   const packagesQ = useQuery({
     queryKey: ["packages-count"],
-    queryFn: () => api<any[]>("/api/packages").catch(() => [] as any[]),
+    queryFn: () => api<unknown[]>("/api/packages").catch(() => [] as unknown[]),
     enabled: !!user && (user.permissions || []).includes("packages:view"),
   });
 
@@ -106,7 +111,7 @@ export function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: any; icon: any }) {
+function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: IconType }) {
   return (
     <div className="stat-card">
       <div className="flex items-center justify-between">

@@ -8,6 +8,11 @@ import { audit } from "../audit.js";
 
 export const partnersRouter = Router();
 
+function isPgError(e: unknown): e is { code: string; detail?: string } {
+  return typeof e === "object" && e !== null && "code" in e &&
+    typeof (e as { code: unknown }).code === "string";
+}
+
 partnersRouter.get("/", requirePerm("partners:view"), async (_req, res) => {
   const list = await db.select().from(partners).orderBy(desc(partners.createdAt));
   res.json(list);
@@ -107,8 +112,8 @@ partnersRouter.post("/", requirePerm("partners:create"), async (req, res) => {
     });
 
     res.status(201).json({ partner, adminUser: { id: adminUser.id, email: adminUser.email } });
-  } catch (e: any) {
-    if (e.code === "23505") return res.status(409).json({ error: "duplicate", detail: e.detail });
+  } catch (e) {
+    if (isPgError(e) && e.code === "23505") return res.status(409).json({ error: "duplicate", detail: e.detail });
     console.error(e);
     res.status(500).json({ error: "server_error" });
   }
@@ -122,13 +127,17 @@ partnersRouter.patch("/:id", requirePerm("partners:edit"), async (req, res) => {
   const [old] = await db.select().from(partners).where(eq(partners.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
   const d = parsed.data;
-  const update: any = { updatedAt: new Date() };
+  const update: Partial<typeof partners.$inferInsert> = { updatedAt: new Date() };
   for (const k of Object.keys(d) as (keyof typeof d)[]) {
-    const v = (d as any)[k];
+    const v = d[k];
     if (v === undefined) continue;
-    if (k === "partnerCommissionPct" || k === "salesCommissionPct") update[k] = String(v);
-    else if (k === "contractStartDate") update[k] = v ? new Date(v as string) : null;
-    else update[k] = v;
+    if (k === "partnerCommissionPct" || k === "salesCommissionPct") {
+      (update as Record<string, unknown>)[k] = String(v);
+    } else if (k === "contractStartDate") {
+      (update as Record<string, unknown>)[k] = v ? new Date(v as string) : null;
+    } else {
+      (update as Record<string, unknown>)[k] = v;
+    }
   }
   const [updated] = await db.update(partners).set(update).where(eq(partners.id, id)).returning();
   await audit({

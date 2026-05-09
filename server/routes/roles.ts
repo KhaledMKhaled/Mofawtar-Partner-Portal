@@ -9,6 +9,11 @@ import { ACTIONS, MODULES } from "../../shared/permissions.js";
 
 export const rolesRouter = Router();
 
+function isPgError(e: unknown): e is { code: string } {
+  return typeof e === "object" && e !== null && "code" in e &&
+    typeof (e as { code: unknown }).code === "string";
+}
+
 rolesRouter.get("/meta", requirePerm("roles:view"), (_req, res) => {
   res.json({ modules: MODULES, actions: ACTIONS });
 });
@@ -46,8 +51,8 @@ rolesRouter.post("/", requirePerm("roles:create"), async (req, res) => {
     const [r] = await db.insert(roles).values({ ...parsed.data, isSystem: false }).returning();
     await audit({ userId: cu.id, action: "role.created", entityType: "role", entityId: r.id, newValue: r });
     res.status(201).json(r);
-  } catch (e: any) {
-    if (e.code === "23505") return res.status(409).json({ error: "duplicate_key" });
+  } catch (e) {
+    if (isPgError(e) && e.code === "23505") return res.status(409).json({ error: "duplicate_key" });
     console.error(e);
     res.status(500).json({ error: "server_error" });
   }
@@ -61,7 +66,7 @@ rolesRouter.patch("/:id", requirePerm("roles:edit"), async (req, res) => {
   const [old] = await db.select().from(roles).where(eq(roles.id, id));
   if (!old) return res.status(404).json({ error: "not_found" });
   // Allow editing permissions on system roles, but not key/scope renames
-  const update: any = {};
+  const update: Partial<typeof roles.$inferInsert> = {};
   if (!old.isSystem) {
     if (parsed.data.key) update.key = parsed.data.key;
     if (parsed.data.scope) update.scope = parsed.data.scope;

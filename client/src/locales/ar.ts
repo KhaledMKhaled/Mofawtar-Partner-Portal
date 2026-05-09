@@ -44,6 +44,9 @@ export const ar: Translations = {
     createdAt: "تاريخ الإنشاء",
     enabled: "مفعل",
     disabled: "معطل",
+    permissionDenied: "ليست لديك صلاحية لعرض هذه الصفحة.",
+    minChars: "{{n}} أحرف على الأقل",
+    leaveBlankToKeep: "اتركها فارغة للإبقاء على الحالية",
   },
   nav: {
     dashboard: "الرئيسية",
@@ -144,6 +147,8 @@ export const ar: Translations = {
     nameEn: "الاسم (إنجليزي)",
     nameAr: "الاسم (عربي)",
     key: "المفتاح",
+    module: "الوحدة",
+    permissionsCount: "{{count}} صلاحية",
   },
   packages: {
     title: "الباقات",
@@ -161,6 +166,9 @@ export const ar: Translations = {
     addRule: "إضافة قاعدة",
     defaultPartnerCommissionPct: "نسبة عمولة الشريك الافتراضية %",
     defaultSalesCommissionPct: "نسبة عمولة المبيعات الافتراضية %",
+    typeSubscription: "اشتراك",
+    typeAddon: "باقة إضافية",
+    typeOther: "أخرى",
   },
   settings: {
     title: "الإعدادات",

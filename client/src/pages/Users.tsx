@@ -217,7 +217,7 @@ export function UsersPage() {
             <input type="email" dir="ltr" className="input" value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
-          <Field label={t("common.password")} required={!editing} hint={editing ? "Leave blank to keep current" : "≥ 8 chars"}>
+          <Field label={t("common.password")} required={!editing} hint={editing ? t("common.leaveBlankToKeep") : t("common.minChars", { n: 8 })}>
             <input type="password" dir="ltr" className="input" value={form.password}
               autoComplete="new-password"
               onChange={(e) => setForm({ ...form, password: e.target.value })} />

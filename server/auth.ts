@@ -11,6 +11,12 @@ declare module "express-session" {
   }
 }
 
+declare module "express-serve-static-core" {
+  interface Request {
+    currentUser?: CurrentUser;
+  }
+}
+
 export async function hashPassword(plain: string) {
   return bcrypt.hash(plain, 10);
 }
@@ -81,7 +87,7 @@ export function requirePerm(...perms: Permission[]) {
     }
     const has = perms.every((p) => user.permissions.includes(p));
     if (!has) return res.status(403).json({ error: "forbidden", missing: perms });
-    (req as any).currentUser = user;
+    req.currentUser = user;
     next();
   };
 }
@@ -89,11 +95,11 @@ export function requirePerm(...perms: Permission[]) {
 export async function attachUser(req: Request, _res: Response, next: NextFunction) {
   if (req.session.userId) {
     const user = await loadCurrentUser(req.session.userId);
-    if (user) (req as any).currentUser = user;
+    if (user) req.currentUser = user;
   }
   next();
 }
 
 export function getUser(req: Request): CurrentUser | undefined {
-  return (req as any).currentUser;
+  return req.currentUser;
 }
