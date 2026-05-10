@@ -37,7 +37,7 @@ export function PaymentsPage() {
   const [to, setTo] = useState("");
   const list = useQuery({
     queryKey: ["payments", { status, from, to }],
-    queryFn: () => api<Row[]>(`/api/payments?${new URLSearchParams({ status, from, to } as Record<string,string>).toString()}`),
+    queryFn: () => api<Row[]>(`/api/payments?${new URLSearchParams({ type: "payment_item", status, from, to } as Record<string,string>).toString()}`),
   });
   const mutate = useMutation({
     mutationFn: (vars: { id: number; toStatus: string; reason?: string }) =>
@@ -45,8 +45,7 @@ export function PaymentsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["payments"] }),
   });
   const canChange = can(user, "payments:change_status");
-  const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
-
+  
   return (
     <div>
       <PageHeader title={t("nav.payments")} subtitle={t("payments.subtitle")} />
@@ -86,7 +85,7 @@ export function PaymentsPage() {
             {list.data?.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted">{t("common.noData")}</td></tr>}
             {list.data?.map((r) => {
               const allowed = ORDER_PAYMENT_TRANSITIONS[r.status] ?? [];
-              const visibleAllowed = allowed.filter((s) => isCompany || (s !== "received_by_company" && s !== "settled"));
+              const visibleAllowed = allowed;
               return (
                 <tr key={r.id}>
                   <td className="font-mono text-xs"><Link to={`/payments/${r.id}`} className="text-violet-700 hover:underline">{r.srNumber ?? `#${r.requestId}`}</Link></td>
@@ -103,7 +102,7 @@ export function PaymentsPage() {
                         onChange={(e) => {
                           const v = e.target.value;
                           if (!v) return;
-                          const reason = ["refunded","cancelled"].includes(v) ? prompt(t("requests.reason") as string) ?? "" : undefined;
+                          const reason = undefined;
                           mutate.mutate({ id: r.id, toStatus: v, reason });
                           e.currentTarget.value = "";
                         }}>
