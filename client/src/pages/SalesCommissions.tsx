@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
+import { FinTabs } from "../components/FinTabs";
 import { useCurrentUser } from "../hooks/useAuth";
 import { SALES_COMMISSION_STATUSES, pillClassFor, tStatus, fmtMoney, type SalesCommissionStatus } from "../lib/financial";
 
@@ -35,6 +36,7 @@ export function SalesCommissionsPage() {
   return (
     <div>
       <PageHeader title={t("nav.sales_commissions")} subtitle={t("salesCommissions.subtitle")} />
+      <FinTabs />
       <div className="flex flex-wrap gap-2 mb-4 items-end justify-between">
         <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t("common.all")}</option>

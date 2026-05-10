@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
+import { FinTabs } from "../components/FinTabs";
 import { useCurrentUser, can } from "../hooks/useAuth";
 import {
-  PARTNER_COMMISSION_STATUSES, PARTNER_COMMISSION_TRANSITIONS, pillClassFor, tStatus, fmtMoney, fmtDate,
+  PARTNER_COMMISSION_STATUSES, pillClassFor, tStatus, fmtMoney, fmtDate,
   type PartnerCommissionStatus,
 } from "../lib/financial";
 
@@ -21,9 +22,17 @@ interface Row {
   pct: string;
   amount: string;
   safetyEndsAt: string | null;
+  isVoided?: boolean;
   status: PartnerCommissionStatus;
   claimId: number | null;
   createdAt: string;
+}
+
+function isClaimable(r: Row): boolean {
+  if (r.status !== "not_added_to_claim") return false;
+  if (r.isVoided) return false;
+  if (r.safetyEndsAt && new Date(r.safetyEndsAt).getTime() > Date.now()) return false;
+  return true;
 }
 
 export function PartnerCommissionsPage() {
@@ -36,22 +45,16 @@ export function PartnerCommissionsPage() {
     queryKey: ["partner-commissions", status],
     queryFn: () => api<Row[]>(`/api/partner-commissions?${new URLSearchParams({ type: "partner_commission_item", status }).toString()}`),
   });
-  const mutate = useMutation({
-    mutationFn: (vars: { id: number; toStatus: string; reason?: string }) =>
-      api(`/api/partner-commissions/${vars.id}/transition`, { method: "POST", json: { toStatus: vars.toStatus, reason: vars.reason } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["partner-commissions"] }),
-  });
   const createClaim = useMutation({
     mutationFn: (ids: number[]) => api<{ id: number; claimNumber: string }>("/api/claims", { method: "POST", json: { partnerCommissionIds: ids } }),
     onSuccess: () => { setSelected(new Set()); qc.invalidateQueries({ queryKey: ["partner-commissions"] }); },
   });
-  const canChange = can(user, "partner_commissions:change_status");
   const canClaim = can(user, "claims:create");
 
+  const eligibleRows = (list.data ?? []).filter(isClaimable);
   const toggleAll = () => {
-    const eligible = (list.data ?? []).filter((r) => r.status === "not_added_to_claim").map((r) => r.id);
-    if (selected.size === eligible.length) setSelected(new Set());
-    else setSelected(new Set(eligible));
+    if (selected.size === eligibleRows.length) setSelected(new Set());
+    else setSelected(new Set(eligibleRows.map((r) => r.id)));
   };
 
   return (
@@ -65,6 +68,7 @@ export function PartnerCommissionsPage() {
           </button>
         ) : null}
       />
+      <FinTabs />
       <div className="flex flex-wrap gap-2 mb-4 items-end">
         <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t("common.all")}</option>
@@ -75,7 +79,7 @@ export function PartnerCommissionsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th><input type="checkbox" checked={selected.size > 0 && selected.size === (list.data ?? []).filter((r) => r.status === "not_added_to_claim").length} onChange={toggleAll} /></th>
+              <th><input type="checkbox" checked={eligibleRows.length > 0 && selected.size === eligibleRows.length} onChange={toggleAll} /></th>
               <th>{t("requests.sr")}</th>
               <th>{t("common.customer")}</th>
               <th>{t("common.partner")}</th>
@@ -84,18 +88,17 @@ export function PartnerCommissionsPage() {
               <th className="text-end">{t("partnerCommissions.amount")}</th>
               <th>{t("partnerCommissions.safetyEnds")}</th>
               <th>{t("common.status")}</th>
-              <th>{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {list.isLoading && <tr><td colSpan={10} className="text-center py-8 text-muted">{t("common.loading")}</td></tr>}
-            {list.data?.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted">{t("common.noData")}</td></tr>}
+            {list.isLoading && <tr><td colSpan={9} className="text-center py-8 text-muted">{t("common.loading")}</td></tr>}
+            {list.data?.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-muted">{t("common.noData")}</td></tr>}
             {list.data?.map((r) => {
-              const allowed = PARTNER_COMMISSION_TRANSITIONS[r.status] ?? [];
-              const isEligible = r.status === "not_added_to_claim";
+              const eligible = isClaimable(r);
+              const pctNum = Number(r.pct);
               return (
                 <tr key={r.id}>
-                  <td>{isEligible ? (
+                  <td>{eligible ? (
                     <input type="checkbox" checked={selected.has(r.id)} onChange={(e) => {
                       const next = new Set(selected);
                       e.target.checked ? next.add(r.id) : next.delete(r.id);
@@ -106,26 +109,10 @@ export function PartnerCommissionsPage() {
                   <td>{r.customerName}</td>
                   <td>{r.partnerName}</td>
                   <td className="text-end font-mono">{fmtMoney(r.baseAmount)}</td>
-                  <td className="text-end font-mono">{Number(r.pct).toFixed(2)}%</td>
+                  <td className="text-end font-mono">{Number.isFinite(pctNum) ? `${pctNum.toFixed(2)}%` : "—"}</td>
                   <td className="text-end font-mono text-violet-700 font-semibold">{fmtMoney(r.amount)}</td>
-                  <td className="text-xs">{fmtDate(r.safetyEndsAt)}</td>
+                  <td className="text-xs">{r.safetyEndsAt ? fmtDate(r.safetyEndsAt) : "—"}</td>
                   <td><span className={pillClassFor(r.status)}>{tStatus(t, "partnerCommission", r.status)}</span></td>
-                  <td>
-                    {canChange && allowed.length > 0 ? (
-                      <select className="input text-xs"
-                        value=""
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (!v) return;
-                          const reason = undefined;
-                          mutate.mutate({ id: r.id, toStatus: v, reason });
-                          e.currentTarget.value = "";
-                        }}>
-                        <option value="">…</option>
-                        {allowed.map((s) => <option key={s} value={s}>{tStatus(t, "partnerCommission", s)}</option>)}
-                      </select>
-                    ) : <span className="text-xs text-muted">—</span>}
-                  </td>
                 </tr>
               );
             })}

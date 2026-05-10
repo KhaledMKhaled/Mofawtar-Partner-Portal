@@ -26,7 +26,7 @@ paymentsRouter.get("/", requirePerm("payments:view"), async (req, res) => {
     partnerId: financialItems.relatedPartnerId, partnerName: partners.name,
     customerId: financialItems.relatedCustomerId, customerName: customers.name, taxCardNumber: customers.taxCardNumber,
     packageId: financialItems.relatedPackageId, packageName: packages.name,
-    grossAmount: financialItems.grossCustomerAmount, amount: financialItems.amount, netDueToCompany: financialItems.netAmountDueToCompany,
+    grossAmount: financialItems.grossCustomerAmount, netAmount: financialItems.itemPriceBeforeTax, taxAmount: financialItems.taxAmount, partnerCommissionAmount: financialItems.partnerCommissionAmount, amount: financialItems.amount, netDueToCompany: financialItems.netAmountDueToCompany,
     status: financialItems.status, claimId: financialItems.claimId, settlementId: financialItems.settlementId,
     createdAt: financialItems.createdAt, settledAt: financialItems.settledAt,
   }).from(financialItems)
