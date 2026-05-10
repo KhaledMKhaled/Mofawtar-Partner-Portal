@@ -198,6 +198,37 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS requests_partner_idx ON requests(partner_id);
     CREATE INDEX IF NOT EXISTS requests_sales_idx ON requests(sales_user_id);
 
+    -- Unified Transaction Lifecycle additions (idempotent).
+    ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS lifecycle_stage VARCHAR(50) NOT NULL DEFAULT 'draft_sr';
+    ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS lifecycle_exception VARCHAR(50);
+    ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS cancelled_from_request_id INTEGER;
+    ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS cloned_to_request_id INTEGER;
+    CREATE INDEX IF NOT EXISTS requests_lifecycle_idx ON requests(lifecycle_stage);
+
+    CREATE TABLE IF NOT EXISTS master_lifecycle_history (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      from_stage VARCHAR(50),
+      to_stage VARCHAR(50) NOT NULL,
+      from_exception VARCHAR(50),
+      to_exception VARCHAR(50),
+      action VARCHAR(50) NOT NULL,
+      reason TEXT,
+      changed_by_user_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS master_lifecycle_history_request_idx ON master_lifecycle_history(request_id);
+
+    -- 1-to-1 invariant: a claim can be linked to at most ONE settlement.
+    -- Partial unique index ignores legacy NULLs while enforcing uniqueness
+    -- for every populated settlements.claim_id going forward.
+    CREATE UNIQUE INDEX IF NOT EXISTS settlements_claim_uniq
+      ON settlements(claim_id) WHERE claim_id IS NOT NULL;
+
     CREATE TABLE IF NOT EXISTS request_status_history (
       id SERIAL PRIMARY KEY,
       request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,

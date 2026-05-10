@@ -241,6 +241,13 @@ export const requests = pgTable(
       .notNull()
       .default("pending_collection_confirmation"),
     status: varchar("status", { length: 30 }).notNull().default("draft_sr"),
+    // Unified Transaction Lifecycle (master status). The legacy `status`
+    // column is kept in sync by the orchestrator so existing screens that
+    // filter on it continue to work.
+    lifecycleStage: varchar("lifecycle_stage", { length: 50 }).notNull().default("draft_sr"),
+    lifecycleException: varchar("lifecycle_exception", { length: 50 }),
+    cancelledFromRequestId: integer("cancelled_from_request_id"),
+    clonedToRequestId: integer("cloned_to_request_id"),
     rejectionReason: text("rejection_reason"),
     activatedAt: timestamp("activated_at"),
     submittedAt: timestamp("submitted_at"),
@@ -250,9 +257,33 @@ export const requests = pgTable(
   },
   (t) => ({
     statusIdx: index("requests_status_idx").on(t.status),
+    lifecycleIdx: index("requests_lifecycle_idx").on(t.lifecycleStage),
     customerIdx: index("requests_customer_idx").on(t.customerId),
     partnerIdx: index("requests_partner_idx").on(t.partnerId),
     salesIdx: index("requests_sales_idx").on(t.salesUserId),
+  })
+);
+
+// Audit table for the unified Master Lifecycle. Every advance, rewind,
+// cancel, fail, reopen and adjustment is recorded here in addition to
+// the per-entity sub-status histories (which the orchestrator also
+// writes for backward compatibility).
+export const masterLifecycleHistory = pgTable(
+  "master_lifecycle_history",
+  {
+    id: serial("id").primaryKey(),
+    requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+    fromStage: varchar("from_stage", { length: 50 }),
+    toStage: varchar("to_stage", { length: 50 }).notNull(),
+    fromException: varchar("from_exception", { length: 50 }),
+    toException: varchar("to_exception", { length: 50 }),
+    action: varchar("action", { length: 50 }).notNull(),
+    reason: text("reason"),
+    changedByUserId: integer("changed_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    requestIdx: index("master_lifecycle_history_request_idx").on(t.requestId),
   })
 );
 

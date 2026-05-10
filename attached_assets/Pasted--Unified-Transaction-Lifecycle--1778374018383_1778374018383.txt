@@ -1,0 +1,312 @@
+==================================================
+Unified Transaction Lifecycle
+==================================================
+
+Replace the multiple manual financial status updates with one main unified workflow called:
+
+Unified Transaction Lifecycle
+Arabic label: دورة العملية الرئيسية
+
+The system must have one main editable status called:
+Master Transaction Status
+
+This master status is the only status users should update from the main UI.
+
+The following sub-statuses must still exist for reporting, audit, dashboards, and financial accuracy, but they should be auto-updated by the system based on the Master Transaction Status:
+
+- Order Status
+- Order Payment Status
+- Partner Commission Status
+- Claim Status
+- Settlement Status
+- Sales Commission Status
+- Customer Ownership Status
+- Audit Log
+- Customer Timeline
+
+Do not remove the sub-statuses.
+Do not make users update each sub-status manually.
+The sub-statuses should be read-only in normal screens.
+Only high-level admin or financial override permission can manually adjust them, and this must require a reason and must be logged.
+
+==================================================
+Master Transaction Statuses
+==================================================
+
+Use these main statuses:
+
+1. Draft SR
+The customer data was saved, but the request is not fully submitted yet.
+
+Auto updates:
+- Order Status = Draft SR
+- Payment Status = Pending Collection Confirmation
+
+2. Submitted - Collection Confirmed
+The package was selected, the full amount collection was confirmed, and the request was submitted.
+
+Auto updates:
+- Order Status = New Request
+- Payment Status = Collected by Sales
+
+3. Received by Company
+The main company received the request.
+
+Auto updates:
+- Order Status = Received
+
+4. Under Activation
+The main company is working on activating the request.
+
+Auto updates:
+- Order Status = Under Activation
+
+5. Activated - In Safety Period
+The request was successfully activated.
+
+Auto updates:
+- Order Status = Activated
+- Customer Ownership starts if eligible
+- Payment Status = Net Amount Due to Company
+- Partner Commission Status = In Safety Period
+- Sales Commission Status = New / Calculated
+- Calculate:
+  - Full customer amount
+  - Partner commission amount
+  - Net amount due to company
+  - Sales commission amount if enabled
+
+6. Eligible for Claim
+The safety period has ended and the partner commission is ready to be claimed.
+
+This can happen automatically after the safety period.
+
+Auto updates:
+- Partner Commission Status = Eligible for Claim
+
+7. In Claim Review
+The commission has been added to a claim.
+
+Auto updates:
+- Claim Status = Draft
+- Partner Commission Status = In Claim
+
+8. Claim Approved - Ready for Settlement
+The company approved the claim and the commission is ready for settlement.
+
+Auto updates:
+- Claim Status = Approved
+- Partner Commission Status = Claim Approved
+- Partner Commission Status = Ready for Settlement
+
+9. Net Payment Received by Company
+The company accountant confirmed that the company received the net amount due from the partner.
+
+Auto updates:
+- Payment Status = Received by Company
+
+10. Fully Settled
+The financial cycle is completed.
+
+Auto updates:
+- Settlement Status = Completed
+- Payment Status = Settled
+- Partner Commission Status = Settled Successfully
+- Claim Status = Settled
+
+==================================================
+Exception Statuses
+==================================================
+
+Use these exception statuses:
+
+1. Failed / Rejected
+Used before activation if the request fails or is rejected.
+
+Rules:
+- Reason is required.
+- No partner commission should be created.
+- No ownership should start.
+- Request can be reopened by authorized company users.
+
+2. Cancelled / Refunded
+Used when the transaction is cancelled or refunded.
+
+Rules:
+- Reason is required.
+- Payment Status = Cancelled or Refunded
+- Partner Commission Status = Rejected or Adjusted if already created
+- Claim must be adjusted or rejected if already created
+- Audit log is required
+
+3. Adjustment Required
+Used for financial corrections.
+
+Rules:
+- High-level financial permission is required.
+- Reason is required.
+- Old values and new values must be logged.
+- The adjustment must appear in Customer 360 Timeline and Audit Log.
+
+4. Reopened
+Used when a Failed / Rejected request is reopened.
+
+Rules:
+- Company permission is required.
+- Reason is required.
+- The request can return to Draft SR or New Request depending on the correction needed.
+- Do not create duplicate Customer 360 Profile.
+
+==================================================
+Allowed Master Status Transitions
+==================================================
+
+Normal path:
+
+Draft SR
+-> Submitted - Collection Confirmed
+-> Received by Company
+-> Under Activation
+-> Activated - In Safety Period
+-> Eligible for Claim
+-> In Claim Review
+-> Claim Approved - Ready for Settlement
+-> Net Payment Received by Company
+-> Fully Settled
+
+Exception paths:
+
+Draft SR / Submitted / Received / Under Activation
+-> Failed / Rejected
+
+Failed / Rejected
+-> Reopened
+-> Draft SR or New Request
+
+Any non-final financial stage
+-> Cancelled / Refunded with permission and reason
+
+Any financial stage before Fully Settled
+-> Adjustment Required with high-level permission and reason
+
+Final statuses:
+- Fully Settled
+- Cancelled / Refunded
+
+Final statuses cannot be changed except by high-level admin override with reason and audit log.
+
+==================================================
+Actions Instead of Manual Status Changes
+==================================================
+
+Users should not manually select many different statuses.
+
+Show clear action buttons based on permission:
+
+- Save Draft
+- Submit Request
+- Receive Request
+- Start Activation
+- Activate Request
+- Reject Request
+- Reopen Request
+- Create Claim
+- Approve Claim
+- Confirm Net Payment Received
+- Complete Settlement
+- Cancel / Refund
+- Create Adjustment
+
+Each action should:
+1. Validate permissions
+2. Validate allowed transition
+3. Update Master Transaction Status
+4. Automatically update all related sub-statuses
+5. Create audit log entry
+6. Add entry to Customer 360 Timeline
+7. Trigger notifications when needed
+
+==================================================
+Financial Calculation Rules
+==================================================
+
+On Activated - In Safety Period:
+
+Calculate:
+
+Full customer amount = Final price after tax
+Commission base = paid amount before tax after discounts
+Partner commission amount = commission base * partner commission percentage
+Net amount due to company = full customer amount - partner commission amount
+Sales commission amount = commission base * sales commission percentage if enabled
+
+Example:
+Item price before tax = 1000
+Tax = 14%
+Full customer amount = 1140
+Partner commission = 20% of 1000 = 200
+Net amount due to company = 1140 - 200 = 940
+Sales commission = 5% of 1000 = 50
+
+Partner pays 940 to the company.
+Company pays 50 to the Sales user separately according to the sales payout cycle.
+
+==================================================
+Visibility Rules
+==================================================
+
+The main screens should show:
+- Master Transaction Status as the main visible status
+- A clear progress timeline
+- Current allowed action buttons
+
+The detailed financial section can show read-only sub-statuses:
+- Order Status
+- Payment Status
+- Partner Commission Status
+- Claim Status
+- Settlement Status
+- Sales Commission Status
+
+Do not allow normal users to manually change these sub-statuses directly.
+
+==================================================
+Audit and Review
+==================================================
+
+Every master status transition must record:
+
+- User
+- Role
+- Date and time
+- Old Master Transaction Status
+- New Master Transaction Status
+- Old sub-status values
+- New sub-status values
+- Related SR
+- Related customer
+- Related partner
+- Related sales user
+- Reason or note when required
+- Financial values before and after when relevant
+
+Customer 360 Timeline must show all lifecycle actions in chronological order.
+
+==================================================
+Dashboard and Reports Impact
+==================================================
+
+Dashboards and reports should primarily group by Master Transaction Status.
+
+Financial detailed reports can still use sub-statuses for accuracy.
+
+Examples:
+- Accountant dashboard should show the main lifecycle stage.
+- Payment reports can still filter by Payment Status.
+- Commission reports can still filter by Partner Commission Status.
+- Claim reports can still filter by Claim Status.
+- Audit reports must show both master status and sub-status changes.
+
+The goal is:
+- One simple operational workflow for users
+- Accurate sub-statuses for accounting, audit, and reports

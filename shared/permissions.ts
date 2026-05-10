@@ -34,6 +34,8 @@ export const ACTIONS = [
   "reopen",
   "reassign",
   "manage",
+  "advance_lifecycle",
+  "manual_override",
 ] as const;
 
 export type Module = (typeof MODULES)[number];
@@ -82,6 +84,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     ...view("requests", "customers", "partners", "packages", "ownership", "audit_log"),
     "requests:change_status",
     "requests:reopen",
+    "requests:advance_lifecycle",
+    "payments:manual_override",
+    "partner_commissions:manual_override",
+    "sales_commissions:manual_override",
+    "claims:manual_override",
+    "settlements:manual_override",
     "excel_import:view",
     "excel_import:import",
     "audit_log:view",
