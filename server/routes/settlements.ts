@@ -83,7 +83,16 @@ settlementsRouter.get("/:id", requirePerm("settlements:view"), async (req, res) 
   }).from(claimItems)
     .leftJoin(financialItems, eq(financialItems.id, claimItems.financialItemId))
     .where(eq(claimItems.claimId, s.claimId));
-  res.json({ settlement: s, items });
+  const payments = items
+    .filter((item) => item.type === "payment_item")
+    .map((item) => ({ id: item.id, grossAmount: item.amount, netDueToCompany: item.amount }));
+  const commissions = items
+    .filter((item) => item.type === "partner_commission_item")
+    .map((item) => ({ id: item.id, amount: item.amount }));
+  const salesCommissions = items
+    .filter((item) => item.type === "sales_commission_item")
+    .map((item) => ({ id: item.id, amount: item.amount }));
+  res.json({ settlement: s, items, payments, commissions, salesCommissions });
 });
 
 const createInput = z.object({
