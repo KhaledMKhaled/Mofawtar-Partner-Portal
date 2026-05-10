@@ -14,7 +14,7 @@ import {
 
 export const excelImportRouter = Router();
 
-const ENTITIES = ["customers", "packages", "requests", "payments", "partner_commissions", "sales_commissions"] as const;
+const ENTITIES = ["customers", "packages", "requests", "payments", "order_payments", "partner_commissions", "sales_commissions"] as const;
 type Entity = (typeof ENTITIES)[number];
 
 const TEMPLATE_HEADERS: Record<Entity, string[]> = {
@@ -22,6 +22,7 @@ const TEMPLATE_HEADERS: Record<Entity, string[]> = {
   packages: ["id", "name", "itemPriceBeforeTax", "taxPct", "finalPriceAfterTax", "durationDays", "active"],
   requests: ["id", "status"],
   payments: ["id", "status"],
+  order_payments: ["id", "status"],
   partner_commissions: ["id", "status"],
   sales_commissions: ["id", "status"],
 };
@@ -80,14 +81,14 @@ async function validateRows(entity: Entity, rows: Array<Record<string, unknown>>
         const [existing] = await db.select().from(packages).where(eq(packages.id, id));
         if (!existing) err = "not_found";
       }
-    } else if (entity === "requests" || entity === "payments" || entity === "partner_commissions" || entity === "sales_commissions") {
+    } else if (entity === "requests" || entity === "payments" || entity === "order_payments" || entity === "partner_commissions" || entity === "sales_commissions") {
       const id = Number(r.id);
       const toStatus = String(r.status ?? r.toStatus ?? "").trim();
       if (!id || !toStatus) err = "missing_id_or_status";
       else {
         const allowedStatuses: readonly string[] =
           entity === "requests" ? REQUEST_STATUSES :
-          entity === "payments" ? ORDER_PAYMENT_STATUSES :
+          entity === "payments" || entity === "order_payments" ? ORDER_PAYMENT_STATUSES :
           entity === "partner_commissions" ? PARTNER_COMMISSION_STATUSES :
           SALES_COMMISSION_STATUSES;
         if (!allowedStatuses.includes(toStatus)) err = "invalid_status";
@@ -175,7 +176,7 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       }
       updated++;
     }
-  } else if (parsed.data.entity === "payments") {
+  } else if (parsed.data.entity === "payments" || parsed.data.entity === "order_payments") {
     for (let i = 0; i < parsed.data.rows.length; i++) {
       const r = parsed.data.rows[i] as Record<string, unknown>;
       const id = Number(r.id);
