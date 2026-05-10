@@ -38,6 +38,31 @@ paymentsRouter.get("/", requirePerm("payments:view"), async (req, res) => {
   res.json(rows);
 });
 
+
+
+// Backward-compatible transition endpoint retained until clients migrate to action endpoints.
+paymentsRouter.post("/:id(\\d+)/transition", requirePerm("payments:change_status"), async (req, res) => {
+  const id = Number(req.params.id);
+  const cu = getUser(req)!;
+  const [item] = await db.select().from(financialItems).where(eq(financialItems.id, id));
+  if (!item || item.type !== "payment_item") return res.status(404).json({ error: "not_found" });
+  if (partnerScoped(cu) && item.relatedPartnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
+
+  const toStatus = String(req.body?.toStatus ?? "");
+  const normalized: Record<string, "not_added_to_claim" | "settled"> = {
+    pending_collection_confirmation: "not_added_to_claim",
+    collected_by_sales: "not_added_to_claim",
+    net_amount_due_to_company: "not_added_to_claim",
+    received_by_company: "not_added_to_claim",
+    settled: "settled",
+  };
+  const mapped = normalized[toStatus];
+  if (!mapped) return res.status(409).json({ error: "unsupported_transition", detail: "use_claim_and_settlement_actions" });
+
+  await db.update(financialItems).set({ status: mapped, settledAt: mapped === "settled" ? new Date() : null, updatedAt: new Date() }).where(eq(financialItems.id, id));
+  res.json({ ok: true, legacy: true });
+});
+
 paymentsRouter.post("/:id(\\d+)/claims", requirePerm("claims:create"), async (req, res) => {
   const id = Number(req.params.id);
   const cu = getUser(req)!;
