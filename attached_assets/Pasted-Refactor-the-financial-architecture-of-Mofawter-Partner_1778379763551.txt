@@ -1,0 +1,547 @@
+Refactor the financial architecture of Mofawter Partner Portal (MPP).
+
+Important:
+Do not keep three independent financial workflows for:
+- order_payments
+- partner_commissions
+- sales_commissions
+
+The system must use one unified financial ledger called financial_items.
+
+financial_items is the single source of truth for all financial records.
+
+Old pages such as Payments, Partner Commissions, and Sales Commissions should become filtered views of financial_items, not separate workflows.
+
+==================================================
+1. Unified Financial Items
+==================================================
+
+Create one table/model:
+
+financial_items
+
+Each financial item must have:
+
+- id
+- type
+- status
+- related_request_id
+- related_sr_number
+- related_customer_id
+- related_partner_id
+- related_sales_user_id
+- related_package_id
+- operation_type
+- gross_customer_amount
+- item_price_before_tax
+- tax_percentage
+- tax_amount
+- final_price_after_tax
+- commission_base
+- partner_commission_percentage
+- partner_commission_amount
+- sales_commission_percentage
+- sales_commission_amount
+- net_amount_due_to_company
+- amount
+- eligible_for_claim_at
+- is_claimable
+- claim_block_reason
+- is_voided
+- void_type
+- void_reason
+- voided_at
+- voided_by
+- created_at
+- updated_at
+- settled_at
+
+Allowed financial item types:
+
+1. payment_item
+Purpose:
+Collect the net amount due to the company from the partner after deducting partner commission.
+
+2. partner_commission_item
+Purpose:
+Document and settle the partner commission deducted from the customer amount.
+
+3. sales_commission_item
+Purpose:
+Document and settle Sales user commission paid separately by the main company.
+
+Allowed financial item statuses only:
+
+1. not_added_to_claim
+Arabic: غير مضافة على مطالبة
+
+2. added_to_claim
+Arabic: مضافة إلى مطالبة
+
+3. added_to_settlement
+Arabic: مضافة إلى تسوية
+
+4. settled
+Arabic: تمت التسوية
+
+Do not use long status flows for financial items.
+
+Do not use:
+- pending_collection_confirmation
+- collected_by_sales
+- held_by_partner
+- net_amount_due_to_company
+- received_by_company
+- in_safety_period
+- eligible_for_claim as item status
+- in_claim as item status
+- claim_approved as item status
+- ready_for_settlement as item status
+- eligible_for_payout as item status
+- in_payout_batch
+- approved_by_company
+- paid
+
+These concepts must be represented by:
+- eligibility fields
+- claim records
+- settlement records
+- audit log
+- timeline
+- balance indicators
+
+==================================================
+2. Create Financial Items on Activation
+==================================================
+
+When a request becomes Activated, automatically create financial items.
+
+Create:
+
+1. payment_item
+amount = net_amount_due_to_company
+
+2. partner_commission_item
+amount = partner_commission_amount
+
+3. sales_commission_item
+amount = sales_commission_amount
+Only create this if Sales commission is enabled and amount is greater than zero.
+
+All items start with:
+status = not_added_to_claim
+
+Calculation example:
+
+Item price before tax = 1000
+Tax percentage = 14%
+Final price after tax = 1140
+Partner commission = 20% of 1000 = 200
+Sales commission = 5% of 1000 = 50
+Net amount due to company = 1140 - 200 = 940
+
+Create:
+- payment_item amount = 940
+- partner_commission_item amount = 200
+- sales_commission_item amount = 50
+
+==================================================
+3. Eligibility Fields
+==================================================
+
+Do not create extra item statuses for safety period or payout cycle.
+
+Use eligibility fields:
+
+- eligible_for_claim_at
+- is_claimable
+- claim_block_reason
+
+Payment Item:
+Usually claimable immediately after activation.
+
+Partner Commission Item:
+Claimable only after partner safety period ends.
+
+eligible_for_claim_at =
+activation_date + partner_safety_period_days
+
+Before this date:
+is_claimable = false
+claim_block_reason = Inside safety period
+
+After this date:
+is_claimable = true
+
+Sales Commission Item:
+Claimable based on Sales commission payout cycle.
+
+If payout cycle is monthly:
+eligible_for_claim_at should follow monthly payout rule.
+
+If payout cycle is every 3 months:
+eligible_for_claim_at should follow quarterly payout rule.
+
+Before adding any item to a claim, validate:
+
+- item.status = not_added_to_claim
+- item.is_voided = false
+- current date >= eligible_for_claim_at
+- item.type matches claim.type
+- related request is Activated
+- user has permission
+
+==================================================
+4. Claims
+==================================================
+
+Use one claims table with a type field.
+
+Allowed claim types:
+
+1. payment_claim
+Arabic: مطالبة مدفوعات
+Can include payment_item records only.
+
+2. partner_commission_claim
+Arabic: مطالبة عمولة شريك
+Can include partner_commission_item records only.
+
+3. sales_commission_claim
+Arabic: مطالبة عمولة مبيعات
+Can include sales_commission_item records only.
+
+A claim can include multiple financial_items of the same type.
+
+Do not mix different financial item types in one claim.
+
+Claim fields:
+
+- id
+- claim_number
+- type
+- status
+- partner_id if applicable
+- total_amount
+- created_by
+- approved_by
+- rejected_by
+- rejection_reason
+- settlement_id nullable
+- created_at
+- approved_at
+- rejected_at
+- settled_at
+
+Claim statuses:
+
+- draft
+- approved
+- rejected
+- in_settlement
+- settled
+
+When items are added to a claim:
+
+- item.status = added_to_claim
+- create claim item relation
+- update claim total amount
+- create audit log
+- update Customer 360 Timeline
+
+If claim is rejected before settlement:
+
+- claim.status = rejected
+- related items return to not_added_to_claim
+- rejection reason is required
+- audit log is required
+
+==================================================
+5. Claim Items
+==================================================
+
+Use claim_items to link claims with financial_items.
+
+claim_items fields:
+
+- id
+- claim_id
+- financial_item_id
+- amount_snapshot
+- created_at
+
+Important:
+Replace any old claim_items references to payment_id, partner_commission_id, or sales_commission_id.
+
+claim_items must reference financial_items.id only.
+
+A financial item can be in only one active claim at a time.
+
+==================================================
+6. Settlements
+==================================================
+
+Use one settlements table with a type field.
+
+Allowed settlement types:
+
+1. payment_settlement
+Arabic: تسوية مدفوعات
+Purpose:
+Confirm the company received the net amount due from the partner.
+
+2. partner_commission_settlement
+Arabic: تسوية عمولة شريك
+Purpose:
+Confirm the partner commission deduction has been documented and settled.
+
+3. sales_commission_settlement
+Arabic: تسوية عمولة مبيعات
+Purpose:
+Confirm Sales commission payout has been completed.
+
+Settlement fields:
+
+- id
+- settlement_number
+- type
+- status
+- total_amount
+- created_by
+- completed_by
+- created_at
+- completed_at
+- notes
+
+Settlement statuses:
+
+- draft
+- completed
+- cancelled
+
+Relationship rule:
+
+One settlement can include one or more claims of the same type.
+
+Do not use settlements.claim_id as a single required field.
+
+Recommended simple implementation:
+Add settlement_id nullable on claims.
+
+Then:
+- one settlement has many claims
+- each claim belongs to one settlement only
+
+When a claim is added to settlement:
+
+- claim.settlement_id = settlement.id
+- claim.status = in_settlement
+- all related financial_items.status = added_to_settlement
+- audit log is created
+- Customer 360 Timeline is updated
+
+When settlement is completed:
+
+- settlement.status = completed
+- all related claims.status = settled
+- all related financial_items.status = settled
+- all related financial_items.settled_at = now
+- audit log is created
+- Customer 360 Timeline is updated
+
+==================================================
+7. Remove Independent Payout Batch Workflow
+==================================================
+
+Do not keep payout_batches as a separate financial workflow.
+
+Sales commission payout must be handled through:
+
+sales_commission_claim
+↓
+sales_commission_settlement
+
+If existing UI has Payout Batches, rename or map it to Sales Commission Claims and Sales Commission Settlements.
+
+Do not create a separate state machine for payout batches.
+
+==================================================
+8. Balance Indicators
+==================================================
+
+Show clear balance indicators in request, customer profile, partner profile, dashboards, and reports.
+
+For each activated request:
+
+Partner-Company Balance:
+Open if payment_item or partner_commission_item is not settled.
+Closed if:
+- payment_item.status = settled
+- partner_commission_item.status = settled
+
+Sales Payout:
+Pending if sales_commission_item exists and is not settled.
+Closed if:
+- sales_commission_item.status = settled
+or no sales commission exists.
+
+Full Financial Status:
+Open if any related financial item is not settled.
+Fully Settled if all related financial items are settled.
+
+Show:
+- Partner-Company Balance: Open / Closed
+- Sales Payout: Pending / Closed
+- Full Financial Status: Open / Fully Settled
+
+==================================================
+9. Refund, Cancel, and Adjustment
+==================================================
+
+Do not add extra lifecycle statuses for refund or cancel.
+
+Use separate fields:
+
+- is_voided
+- void_type
+- void_reason
+- voided_at
+- voided_by
+
+If financial item is cancelled before claim:
+- keep status as not_added_to_claim
+- set is_voided = true
+- set void reason
+
+If financial item is already in claim but not settlement:
+- reject or adjust claim
+- return item to not_added_to_claim if needed
+- set is_voided = true if cancelled
+
+If financial item is already settled:
+- do not edit the settled item
+- create a negative adjustment financial_item
+- link it to the original item
+- require reason
+- log audit entry
+
+==================================================
+10. UI Rules
+==================================================
+
+Do not show many financial status dropdowns.
+
+Show financial item status badge only:
+
+- غير مضافة على مطالبة
+- مضافة إلى مطالبة
+- مضافة إلى تسوية
+- تمت التسوية
+
+Show action buttons:
+
+For claims:
+- Create Payment Claim
+- Create Partner Commission Claim
+- Create Sales Commission Claim
+- Approve Claim
+- Reject Claim
+- Move Claim to Settlement
+
+For settlements:
+- Create Payment Settlement
+- Create Partner Commission Settlement
+- Create Sales Commission Settlement
+- Complete Settlement
+
+Each action must:
+- validate permission
+- validate item type
+- validate eligibility
+- update financial item statuses automatically
+- update claim status
+- update settlement status
+- create audit log
+- update Customer 360 Timeline
+- trigger notification
+
+==================================================
+11. Reports and Dashboards
+==================================================
+
+Update all dashboards and reports to use financial_items as the financial source of truth.
+
+Payments page:
+financial_items where type = payment_item
+
+Partner Commissions page:
+financial_items where type = partner_commission_item
+
+Sales Commissions page:
+financial_items where type = sales_commission_item
+
+Reports must filter by:
+
+- financial item type
+- financial item status
+- claim type
+- settlement type
+- partner
+- sales user
+- customer
+- SR number
+- package
+- operation type
+- date range
+- eligibility date
+
+Customer 360 Profile must show:
+
+- all related financial_items
+- related claims
+- related settlements
+- balance indicators
+- audit timeline
+
+Dashboards must show counts and totals for:
+
+Payment Items:
+- not_added_to_claim
+- added_to_claim
+- added_to_settlement
+- settled
+
+Partner Commission Items:
+- not_added_to_claim
+- added_to_claim
+- added_to_settlement
+- settled
+
+Sales Commission Items:
+- not_added_to_claim
+- added_to_claim
+- added_to_settlement
+- settled
+
+==================================================
+12. Migration / Refactor Instructions
+==================================================
+
+If old tables exist:
+- Migrate old order_payments into financial_items with type = payment_item.
+- Migrate old partner_commissions into financial_items with type = partner_commission_item.
+- Migrate old sales_commissions into financial_items with type = sales_commission_item.
+- Stop using old tables as source of truth.
+- Update old pages to read from financial_items filtered by type.
+- Update claim_items to reference financial_item_id.
+- Replace settlements.claim_id with claims.settlement_id or a settlement_claims relation.
+- Update activation logic to create financial_items only.
+- Update reports, dashboards, and Customer 360 Profile to use financial_items.
+
+The final result must be:
+One unified financial item model.
+Three claim types.
+Three settlement types.
+Four simple financial item statuses.
+Automatic status updates from claim and settlement actions.
+No manual direct status changes on financial items.

@@ -78,6 +78,13 @@ export const ar: Translations = {
     audit_log: "سجل التدقيق",
     settings: "الإعدادات",
     notifications: "الإشعارات",
+    sections: {
+      overview: "نظرة عامة",
+      operations: "العمليات",
+      financial: "المالية",
+      administration: "الإدارة",
+      system: "النظام",
+    },
   },
   auth: {
     signIn: "تسجيل الدخول",

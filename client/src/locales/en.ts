@@ -76,6 +76,13 @@ export const en = {
     audit_log: "Audit Log",
     settings: "Settings",
     notifications: "Notifications",
+    sections: {
+      overview: "Overview",
+      operations: "Operations",
+      financial: "Financial",
+      administration: "Administration",
+      system: "System",
+    },
   },
   auth: {
     signIn: "Sign in",

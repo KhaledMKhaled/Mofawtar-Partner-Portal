@@ -1,0 +1,368 @@
+==================================================
+Unified Financial Items, Claims, and Settlements
+==================================================
+
+Simplify the financial workflow.
+
+Do not use separate long status flows for:
+- Order Payment Status
+- Partner Commission Status
+- Sales Commission Status
+
+Instead, after every successfully Activated request, automatically create three financial items:
+
+1. Payment Item
+Type: payment_item
+Purpose: collect the net amount due to the company from the partner after deducting partner commission.
+
+2. Partner Commission Item
+Type: partner_commission_item
+Purpose: document and settle the partner commission that was deducted from the collected customer amount.
+
+3. Sales Commission Item
+Type: sales_commission_item
+Purpose: document and settle the Sales user commission paid separately by the main company.
+
+Each financial item must have one unified lifecycle status only:
+
+1. not_added_to_claim
+Arabic: غير مضافة على مطالبة
+
+2. added_to_claim
+Arabic: مضافة إلى مطالبة
+
+3. added_to_settlement
+Arabic: مضافة إلى تسوية
+
+4. settled
+Arabic: تمت التسوية
+
+These four statuses apply to all financial item types:
+- payment_item
+- partner_commission_item
+- sales_commission_item
+
+Users must not manually change the financial item status directly.
+The status must be updated automatically based on claim and settlement actions.
+
+==================================================
+Financial Item Creation on Activation
+==================================================
+
+When a request becomes Activated, the system must automatically create:
+
+1. Payment Item
+Amount = Net amount due to company
+Formula:
+Net amount due to company = Final price after tax - Partner commission amount
+
+2. Partner Commission Item
+Amount = Partner commission amount
+
+3. Sales Commission Item
+Amount = Sales commission amount, only if sales commission is enabled
+
+All created financial items start with:
+
+status = not_added_to_claim
+
+Each financial item must store:
+- Related SR
+- Related customer
+- Related partner
+- Related sales user if applicable
+- Related package
+- Operation type
+- Gross customer amount
+- Item price before tax
+- Tax amount
+- Final price after tax
+- Commission base
+- Partner commission percentage
+- Partner commission amount
+- Sales commission percentage
+- Sales commission amount
+- Net amount due to company
+- Financial item type
+- Financial item status
+- eligible_for_claim_at
+- claim_id if added to claim
+- settlement_id if added to settlement
+- created_at
+- settled_at
+
+Example:
+Item price before tax = 1000
+Tax = 14%
+Final price after tax = 1140
+Partner commission = 20% of 1000 = 200
+Sales commission = 5% of 1000 = 50
+Net amount due to company = 1140 - 200 = 940
+
+Create:
+- payment_item amount = 940
+- partner_commission_item amount = 200
+- sales_commission_item amount = 50
+
+==================================================
+Claim Types
+==================================================
+
+The system must support three claim types:
+
+1. Payment Claim
+Type: payment_claim
+Arabic: مطالبة مدفوعات
+Purpose: group payment_item records to collect the net amount due from the partner to the company.
+
+2. Partner Commission Claim
+Type: partner_commission_claim
+Arabic: مطالبة عمولة شريك
+Purpose: group partner_commission_item records to document and approve the partner commission deduction.
+
+3. Sales Commission Claim
+Type: sales_commission_claim
+Arabic: مطالبة عمولة مبيعات
+Purpose: group sales_commission_item records to prepare sales commission payout from the company to Sales users.
+
+Important:
+A claim can include only financial items of the same type.
+
+Examples:
+- payment_claim can include payment_item records only.
+- partner_commission_claim can include partner_commission_item records only.
+- sales_commission_claim can include sales_commission_item records only.
+
+Do not mix payment items, partner commission items, and sales commission items in the same claim.
+
+When financial items are added to a claim:
+- financial_item.status = added_to_claim
+- claim_id is saved on each item
+- audit log is created
+- Customer 360 Timeline is updated
+
+If a claim is rejected or cancelled before settlement:
+- items return to not_added_to_claim
+- reason is required
+- audit log is created
+
+==================================================
+Settlement Types
+==================================================
+
+The system must support three settlement types:
+
+1. Payment Settlement
+Type: payment_settlement
+Arabic: تسوية مدفوعات
+Purpose: confirm that the company received the net amount due from the partner.
+
+2. Partner Commission Settlement
+Type: partner_commission_settlement
+Arabic: تسوية عمولة شريك
+Purpose: confirm that the partner commission deduction has been documented and settled.
+
+3. Sales Commission Settlement
+Type: sales_commission_settlement
+Arabic: تسوية عمولة مبيعات
+Purpose: confirm that the Sales commission payout has been completed.
+
+A settlement can include one or more claims of the same type.
+
+Examples:
+- payment_settlement can include payment_claim records only.
+- partner_commission_settlement can include partner_commission_claim records only.
+- sales_commission_settlement can include sales_commission_claim records only.
+
+When a claim is added to a settlement:
+- all items inside the claim become added_to_settlement
+- settlement_id is saved on each item
+- audit log is created
+- Customer 360 Timeline is updated
+
+When the settlement is completed:
+- all related financial items become settled
+- settlement completed_at is saved
+- claim status becomes settled
+- audit log is created
+- Customer 360 Timeline is updated
+
+==================================================
+Eligibility Rules
+==================================================
+
+Financial item status should remain simple.
+
+Do not create extra status values for safety period or payout cycle.
+
+Use eligibility fields instead:
+
+- eligible_for_claim_at
+- is_claimable
+- claim_block_reason if not claimable
+
+Payment Item:
+- Usually claimable immediately after activation or once net amount due is calculated.
+
+Partner Commission Item:
+- Claimable only after the partner safety period ends.
+- Safety period starts from request activation date.
+- eligible_for_claim_at = activation date + safety period days.
+
+Sales Commission Item:
+- Claimable based on sales commission payout cycle.
+- If payout cycle is monthly, eligible according to monthly payout rule.
+- If payout cycle is every 3 months, eligible according to quarterly payout rule.
+
+Before adding any financial item to a claim, the system must check:
+- financial_item.status = not_added_to_claim
+- current date >= eligible_for_claim_at
+- financial item type matches claim type
+- user has permission
+- item is not cancelled or refunded
+- related request is Activated
+
+==================================================
+Manual and Auto Claim Creation
+==================================================
+
+Both manual and auto modes must use the same structure.
+
+Manual mode:
+- Authorized user selects eligible financial items.
+- User clicks Create Claim.
+- System creates the claim and changes selected items to added_to_claim.
+
+Auto mode:
+- System periodically collects eligible financial items based on partner settings or payout cycle.
+- System creates the claim automatically.
+- System changes included items to added_to_claim.
+
+In both modes:
+- The financial item status is updated automatically.
+- The user does not manually change the status.
+
+==================================================
+Balance Zeroing Logic
+==================================================
+
+The purpose of the financial workflow is to zero balances clearly.
+
+For each activated request:
+
+1. Company right from partner:
+payment_item amount = Final price after tax - Partner commission amount
+
+2. Partner commission documentation:
+partner_commission_item amount = Partner commission amount
+
+3. Sales commission payout:
+sales_commission_item amount = Sales commission amount
+
+Partner-company balance is closed when:
+- payment_item is settled
+- partner_commission_item is settled
+
+Full financial closure is completed when:
+- payment_item is settled
+- partner_commission_item is settled
+- sales_commission_item is settled, if sales commission exists
+
+Sales commission can be settled later and independently.
+It should not block partner-company balance closure.
+
+Show clear balance indicators:
+- Partner-Company Balance: Open / Closed
+- Sales Payout: Pending / Closed
+- Full Financial Status: Open / Fully Settled
+
+==================================================
+User Interface Rules
+==================================================
+
+Do not show many status dropdowns.
+
+For financial items, show the unified status badge:
+- غير مضافة على مطالبة
+- مضافة إلى مطالبة
+- مضافة إلى تسوية
+- تمت التسوية
+
+Show action buttons instead:
+
+For claims:
+- Create Payment Claim
+- Create Partner Commission Claim
+- Create Sales Commission Claim
+- Approve Claim
+- Reject Claim
+- Move Claim to Settlement
+
+For settlements:
+- Create Payment Settlement
+- Create Partner Commission Settlement
+- Create Sales Commission Settlement
+- Complete Settlement
+
+Each action must:
+- Validate permissions
+- Validate item type
+- Validate eligibility
+- Update financial item status automatically
+- Create audit log
+- Update Customer 360 Timeline
+- Trigger notifications
+
+==================================================
+Reports and Dashboards
+==================================================
+
+Reports should use the simplified financial item status.
+
+Filter financial items by:
+- Financial item type
+- Financial item status
+- Partner
+- Sales user
+- Customer
+- SR
+- Claim
+- Settlement
+- Date range
+- Eligibility date
+
+Dashboards should show:
+
+Payment Items:
+- Not added to claim
+- Added to claim
+- Added to settlement
+- Settled
+- Total net due to company
+- Total collected/settled
+
+Partner Commission Items:
+- Not added to claim
+- Added to claim
+- Added to settlement
+- Settled
+- Total partner commission
+- Total documented/settled commission
+
+Sales Commission Items:
+- Not added to claim
+- Added to claim
+- Added to settlement
+- Settled
+- Total sales commission
+- Total paid sales commission
+
+Always separate:
+- Payment Claims
+- Partner Commission Claims
+- Sales Commission Claims
+
+Always separate:
+- Payment Settlements
+- Partner Commission Settlements
+- Sales Commission Settlements

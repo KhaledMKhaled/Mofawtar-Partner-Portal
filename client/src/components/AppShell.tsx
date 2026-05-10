@@ -146,7 +146,14 @@ export function AppShell() {
   });
 
   if (!user) return null;
-  const navItems: Module[] = MODULES.filter((m) => ROUTES[m] && canModule(user, m));
+  const allowed = (mods: Module[]) => mods.filter((m) => ROUTES[m] && canModule(user, m));
+  const navSections: { key: string; items: Module[] }[] = [
+    { key: "overview",       items: allowed(["dashboard"]) },
+    { key: "operations",     items: allowed(["customers", "requests", "packages"]) },
+    { key: "financial",      items: allowed(["payments", "partner_commissions", "sales_commissions", "claims", "settlements", "payout_batches"]) },
+    { key: "administration", items: allowed(["partners", "users", "roles", "ownership"]) },
+    { key: "system",         items: allowed(["reports", "audit_log", "excel_import", "settings"]) },
+  ].filter((s) => s.items.length > 0);
   const toggleLang = () => i18n.changeLanguage(isAr ? "en" : "ar");
 
   return (
@@ -159,25 +166,37 @@ export function AppShell() {
             <div className="text-xs text-muted">{t("brand.portal")}</div>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {navItems.map((mod) => {
-            const Icon: IconType = ICONS[mod] ?? LayoutDashboard;
-            const path = ROUTES[mod] || "/";
-            return (
-              <NavLink
-                key={mod}
-                to={path}
-                end={path === "/"}
-                className={({ isActive }) =>
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition " +
-                  (isActive ? "bg-violet-50 text-violet-700 font-semibold" : "text-ink hover:bg-magnolia")
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+          {navSections.map((section) => (
+            <div key={section.key} className="space-y-1">
+              <div
+                className={
+                  "px-3 pt-1 pb-1 font-semibold text-slate-400 " +
+                  (isAr ? "text-xs" : "text-[10px] uppercase tracking-wider")
                 }
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{t(`nav.${mod}`)}</span>
-              </NavLink>
-            );
-          })}
+                {t(`nav.sections.${section.key}`)}
+              </div>
+              {section.items.map((mod) => {
+                const Icon: IconType = ICONS[mod] ?? LayoutDashboard;
+                const path = ROUTES[mod] || "/";
+                return (
+                  <NavLink
+                    key={mod}
+                    to={path}
+                    end={path === "/"}
+                    className={({ isActive }) =>
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition " +
+                      (isActive ? "bg-violet-50 text-violet-700 font-semibold" : "text-ink hover:bg-magnolia")
+                    }
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{t(`nav.${mod}`)}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="px-4 py-3 border-t border-border text-[11px] text-muted">
           © {new Date().getFullYear()} {t("brand.name")} · {t("brand.tagline")}
