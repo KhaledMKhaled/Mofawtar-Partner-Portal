@@ -90,12 +90,20 @@ export function UsersPage() {
 
   const create = useMutation({
     mutationFn: (data: Record<string, unknown>) => api("/api/users", { method: "POST", json: data }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["team-leaders"] });
+      setOpen(false);
+    },
   });
   const update = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
       api(`/api/users/${id}`, { method: "PATCH", json: data }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setOpen(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["team-leaders"] });
+      setOpen(false);
+    },
   });
 
   // Server already filters roles to what the current user may assign.
