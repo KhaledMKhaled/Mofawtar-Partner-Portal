@@ -71,3 +71,28 @@ export function claimTypeForFinancialItemType(financialItemType: FinancialItemTy
 export function financialItemTypeForClaimType(claimType: ClaimType): FinancialItemType {
   return CLAIM_TYPE_TO_FINANCIAL_ITEM_TYPE[claimType];
 }
+
+export function commissionBase(
+  itemPriceBeforeTax: number,
+  finalPriceAfterTax: number,
+  base: "before_tax" | "after_tax",
+): number {
+  return base === "after_tax" ? finalPriceAfterTax : itemPriceBeforeTax;
+}
+
+export function calcCommission(base: number, pct: number): number {
+  return Math.round(base * pct) / 100;
+}
+
+export type SettlementDirection =
+  | "partner_to_company"
+  | "company_to_partner"
+  | "partner_to_sales";
+
+export function defaultDirectionFor(claimType: ClaimType): SettlementDirection {
+  switch (claimType) {
+    case "payment_claim": return "partner_to_company";
+    case "partner_commission_claim": return "company_to_partner";
+    case "sales_commission_claim": return "partner_to_sales";
+  }
+}
