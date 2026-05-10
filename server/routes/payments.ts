@@ -59,8 +59,24 @@ paymentsRouter.post("/:id(\\d+)/transition", requirePerm("payments:change_status
   const mapped = normalized[toStatus];
   if (!mapped) return res.status(409).json({ error: "unsupported_transition", detail: "use_claim_and_settlement_actions" });
 
-  await db.update(financialItems).set({ status: mapped, settledAt: mapped === "settled" ? new Date() : null, updatedAt: new Date() }).where(eq(financialItems.id, id));
-  res.json({ ok: true, legacy: true });
+  const isSettled = item.status === "settled";
+  const isClaimLinked = item.claimId !== null;
+  const isSettlementLinked = item.settlementId !== null;
+
+  // Guard claim/settlement workflow invariants on the legacy endpoint.
+  if (mapped === "settled") {
+    return res.status(409).json({ error: "unsupported_transition", detail: "use_claim_and_settlement_actions" });
+  }
+
+  if (isSettled || isClaimLinked || isSettlementLinked) {
+    return res.status(409).json({ error: "unsupported_transition", detail: "use_claim_and_settlement_actions" });
+  }
+
+  await db
+    .update(financialItems)
+    .set({ status: "not_added_to_claim", settledAt: null, updatedAt: new Date() })
+    .where(eq(financialItems.id, id));
+  res.json({ ok: true, legacy: true, status: "not_added_to_claim" });
 });
 
 paymentsRouter.post("/:id(\\d+)/claims", requirePerm("claims:create"), async (req, res) => {
