@@ -6,7 +6,11 @@ import {
   payoutBatches, payoutBatchItems, salesCommissions, partners, customers, packages, users,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
-import { createPayoutBatch, approvePayoutBatch, payPayoutBatch } from "../financial.js";
+// Mutating endpoints are deprecated — sales-commission payouts now flow
+// through unified Claims (`type=sales_commission`) and Settlements. The
+// generic primitives create claim/settlement IDs that do not correspond to
+// `payout_batches` rows, so calling the legacy create/approve/pay endpoints
+// would silently corrupt the audit trail. We answer 410 Gone instead.
 
 export const payoutBatchesRouter = Router();
 
@@ -75,44 +79,14 @@ payoutBatchesRouter.get("/:id", requirePerm("payout_batches:view"), async (req, 
   res.json({ batch: b, items });
 });
 
-const createInput = z.object({
-  partnerId: z.coerce.number().int().optional(),
-  cycle: z.enum(["monthly", "quarterly"]).default("monthly"),
-  salesCommissionIds: z.array(z.coerce.number().int()).min(1),
-  notes: z.string().optional(),
-});
-
-payoutBatchesRouter.post("/", requirePerm("payout_batches:create"), async (req, res) => {
-  const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
-  const parsed = createInput.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
-  const partnerId = parsed.data.partnerId;
-  if (!partnerId) return res.status(400).json({ error: "partner_required" });
-  try {
-    const result = await createPayoutBatch({
-      partnerId, cycle: parsed.data.cycle, salesCommissionIds: parsed.data.salesCommissionIds, userId: cu.id, notes: parsed.data.notes,
-    });
-    res.json(result);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(400).json({ error: msg || "failed" });
-  }
-});
-
-payoutBatchesRouter.post("/:id/approve", requirePerm("payout_batches:approve"), async (req, res) => {
-  const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
-  try { await approvePayoutBatch(Number(req.params.id), cu.id); res.json({ ok: true }); }
-  catch (e: unknown) { res.status(409).json({ error: e instanceof Error ? e.message : String(e) }); }
-});
-
-payoutBatchesRouter.post("/:id/pay", requirePerm("payout_batches:approve"), async (req, res) => {
-  const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
-  try { await payPayoutBatch(Number(req.params.id), cu.id); res.json({ ok: true }); }
-  catch (e: unknown) { res.status(409).json({ error: e instanceof Error ? e.message : String(e) }); }
-});
+const goneBody = {
+  error: "deprecated",
+  message: "payout_batches mutations are deprecated; use /api/claims with type=sales_commission",
+  redirect: "/claims?type=sales_commission",
+};
+payoutBatchesRouter.post("/", (_req, res) => res.status(410).json(goneBody));
+payoutBatchesRouter.post("/:id/approve", (_req, res) => res.status(410).json(goneBody));
+payoutBatchesRouter.post("/:id/pay", (_req, res) => res.status(410).json(goneBody));
 
 // Bulk: mark eligible_for_payout for sales commissions in `new` status for a partner.
 const promoteInput = z.object({ partnerId: z.coerce.number().int(), ids: z.array(z.coerce.number().int()).optional() });

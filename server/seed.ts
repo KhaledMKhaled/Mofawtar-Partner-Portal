@@ -466,8 +466,22 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS order_payments_request_uniq ON order_payments(request_id);
     CREATE UNIQUE INDEX IF NOT EXISTS partner_commissions_request_uniq ON partner_commissions(request_id);
     CREATE UNIQUE INDEX IF NOT EXISTS sales_commissions_request_uniq ON sales_commissions(request_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS claim_items_pc_uniq ON claim_items(partner_commission_id);
+    -- Polymorphic claim_items uniqueness (partial: ignores NULLs from the
+    -- other two FK columns since each row populates exactly one).
+    CREATE UNIQUE INDEX IF NOT EXISTS claim_items_pc_uniq
+      ON claim_items(partner_commission_id) WHERE partner_commission_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS claim_items_op_uniq
+      ON claim_items(order_payment_id) WHERE order_payment_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS claim_items_sc_uniq
+      ON claim_items(sales_commission_id) WHERE sales_commission_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS payout_batch_items_sc_uniq ON payout_batch_items(sales_commission_id);
+
+    -- Lighter-refactor parity: payment/sales claims need claim_id on their
+    -- subject tables, and sales settlements need settlement_id on sales_commissions.
+    -- Pre-existing DBs may pre-date these columns; add idempotently.
+    ALTER TABLE order_payments    ADD COLUMN IF NOT EXISTS claim_id INTEGER;
+    ALTER TABLE sales_commissions ADD COLUMN IF NOT EXISTS claim_id INTEGER;
+    ALTER TABLE sales_commissions ADD COLUMN IF NOT EXISTS settlement_id INTEGER;
   `);
 }
 
