@@ -367,6 +367,7 @@ export async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       claim_number VARCHAR(60) NOT NULL UNIQUE,
       partner_id INTEGER NOT NULL REFERENCES partners(id),
+      type VARCHAR(30) NOT NULL,
       status VARCHAR(30) NOT NULL DEFAULT 'draft',
       auto_generated BOOLEAN NOT NULL DEFAULT FALSE,
       total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -384,14 +385,30 @@ export async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS claims_partner_idx ON claims(partner_id);
     CREATE INDEX IF NOT EXISTS claims_status_idx ON claims(status);
+    CREATE INDEX IF NOT EXISTS claims_type_idx ON claims(type);
+    -- Pre-existing DBs may have been created without the type column; add it idempotently.
+    ALTER TABLE claims ADD COLUMN IF NOT EXISTS type VARCHAR(30);
+    UPDATE claims SET type = 'partner_commission' WHERE type IS NULL;
+    ALTER TABLE claims ALTER COLUMN type SET NOT NULL;
 
     CREATE TABLE IF NOT EXISTS claim_items (
       id SERIAL PRIMARY KEY,
       claim_id INTEGER NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-      partner_commission_id INTEGER NOT NULL REFERENCES partner_commissions(id),
+      partner_commission_id INTEGER REFERENCES partner_commissions(id),
+      order_payment_id INTEGER REFERENCES order_payments(id),
+      sales_commission_id INTEGER REFERENCES sales_commissions(id),
       amount NUMERIC(14,2) NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      CONSTRAINT claim_items_exactly_one_subject CHECK (
+        (CASE WHEN partner_commission_id IS NOT NULL THEN 1 ELSE 0 END
+       + CASE WHEN order_payment_id     IS NOT NULL THEN 1 ELSE 0 END
+       + CASE WHEN sales_commission_id  IS NOT NULL THEN 1 ELSE 0 END) = 1
+      )
     );
+    -- Idempotent column adds for pre-existing claim_items rows.
+    ALTER TABLE claim_items ALTER COLUMN partner_commission_id DROP NOT NULL;
+    ALTER TABLE claim_items ADD COLUMN IF NOT EXISTS order_payment_id INTEGER REFERENCES order_payments(id);
+    ALTER TABLE claim_items ADD COLUMN IF NOT EXISTS sales_commission_id INTEGER REFERENCES sales_commissions(id);
 
     CREATE TABLE IF NOT EXISTS payout_batches (
       id SERIAL PRIMARY KEY,
@@ -424,10 +441,9 @@ export async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       settlement_number VARCHAR(60) NOT NULL UNIQUE,
       partner_id INTEGER NOT NULL REFERENCES partners(id),
-      claim_id INTEGER REFERENCES claims(id),
-      net_due_to_company NUMERIC(14,2) NOT NULL DEFAULT 0,
-      partner_commission_total NUMERIC(14,2) NOT NULL DEFAULT 0,
-      final_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      claim_id INTEGER NOT NULL REFERENCES claims(id),
+      type VARCHAR(30) NOT NULL,
+      total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
       direction VARCHAR(20) NOT NULL DEFAULT 'partner_to_company',
       notes TEXT,
       created_by_user_id INTEGER,
@@ -435,6 +451,16 @@ export async function ensureSchema() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS settlements_partner_idx ON settlements(partner_id);
+    CREATE INDEX IF NOT EXISTS settlements_type_idx ON settlements(type);
+    CREATE UNIQUE INDEX IF NOT EXISTS settlements_claim_uniq ON settlements(claim_id) WHERE claim_id IS NOT NULL;
+    -- Idempotent shape upgrade for pre-existing settlements rows.
+    ALTER TABLE settlements ADD COLUMN IF NOT EXISTS type VARCHAR(30);
+    ALTER TABLE settlements ADD COLUMN IF NOT EXISTS total_amount NUMERIC(14,2) NOT NULL DEFAULT 0;
+    UPDATE settlements SET type = 'partner_commission' WHERE type IS NULL;
+    ALTER TABLE settlements ALTER COLUMN type SET NOT NULL;
+    ALTER TABLE settlements DROP COLUMN IF EXISTS net_due_to_company;
+    ALTER TABLE settlements DROP COLUMN IF EXISTS partner_commission_total;
+    ALTER TABLE settlements DROP COLUMN IF EXISTS final_amount;
 
     -- Phase 3 financial integrity: prevent duplicate financial rows / double-claim / double-payout.
     CREATE UNIQUE INDEX IF NOT EXISTS order_payments_request_uniq ON order_payments(request_id);

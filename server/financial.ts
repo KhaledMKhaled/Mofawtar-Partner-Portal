@@ -836,6 +836,14 @@ export async function createClaim(opts: {
   const { claim, total, claimNumber } = await db.transaction(async (tx) => {
     const items = await handler.loadEligible(tx, opts.partnerId, opts.itemIds);
     if (items.length === 0) throw new Error("no_eligible_items");
+    // Strict attachment: every requested ID must resolve to an eligible item
+    // for this partner. Silently dropping ineligible/foreign IDs would let
+    // callers create partial claims and is not allowed.
+    if (items.length !== opts.itemIds.length) {
+      const found = new Set(items.map((i) => i.id));
+      const missing = opts.itemIds.filter((id) => !found.has(id));
+      throw new Error(`ineligible_items:${missing.join(",")}`);
+    }
     const total = items.reduce((s, i) => s + Number(i.amount), 0);
     const claimNumber = `${claimNumberPrefix(opts.type)}-${Date.now()}-${opts.partnerId}`;
     const [claim] = await tx
