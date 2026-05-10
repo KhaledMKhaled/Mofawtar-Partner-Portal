@@ -1,136 +1,28 @@
 import { Router } from "express";
-import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { z } from "zod";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
-import {
-  partnerCommissions, partnerCommissionStatusHistory, customers, partners, packages, requests, users,
-} from "../schema.js";
+import { financialItems, customers, partners, packages, requests } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
-import { transitionPartnerCommission } from "../financial.js";
-import { PARTNER_COMMISSION_STATUSES, type PartnerCommissionStatus } from "../../shared/financial.js";
+import { createClaim } from "../financial.js";
 
 export const partnerCommissionsRouter = Router();
-
-function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
-  return cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant";
-}
+const partnerScoped = (cu: { roleKey: string; partnerId: number | null }) => !!(cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant");
 
 partnerCommissionsRouter.get("/", requirePerm("partner_commissions:view"), async (req, res) => {
-  const cu = getUser(req)!;
-  const { status, partnerId, from, to } = req.query as Record<string, string | undefined>;
-  const filters: SQL[] = [];
-  if (partnerScoped(cu)) filters.push(eq(partnerCommissions.partnerId, cu.partnerId!));
-  else if (partnerId) filters.push(eq(partnerCommissions.partnerId, Number(partnerId)));
-  if (status) filters.push(eq(partnerCommissions.status, status));
-  if (from) filters.push(sql`${partnerCommissions.createdAt} >= ${new Date(from)}`);
-  if (to) filters.push(sql`${partnerCommissions.createdAt} <= ${new Date(to)}`);
-  const where = filters.length ? and(...filters) : undefined;
-  const q = db
-    .select({
-      id: partnerCommissions.id,
-      requestId: partnerCommissions.requestId,
-      srNumber: requests.srNumber,
-      partnerId: partnerCommissions.partnerId,
-      partnerName: partners.name,
-      customerId: partnerCommissions.customerId,
-      customerName: customers.name,
-      packageId: partnerCommissions.packageId,
-      packageName: packages.name,
-      baseAmount: partnerCommissions.baseAmount,
-      pct: partnerCommissions.pct,
-      amount: partnerCommissions.amount,
-      safetyEndsAt: partnerCommissions.safetyEndsAt,
-      status: partnerCommissions.status,
-      claimId: partnerCommissions.claimId,
-      createdAt: partnerCommissions.createdAt,
-    })
-    .from(partnerCommissions)
-    .leftJoin(requests, eq(requests.id, partnerCommissions.requestId))
-    .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-    .leftJoin(partners, eq(partners.id, partnerCommissions.partnerId))
-    .leftJoin(packages, eq(packages.id, partnerCommissions.packageId));
-  const rows = where
-    ? await q.where(where).orderBy(desc(partnerCommissions.createdAt)).limit(500)
-    : await q.orderBy(desc(partnerCommissions.createdAt)).limit(500);
+  const cu = getUser(req)!; const { status, partnerId, from, to } = req.query as Record<string, string | undefined>;
+  const filters: SQL[] = [eq(financialItems.type, "partner_commission_item")];
+  if (partnerScoped(cu)) filters.push(eq(financialItems.relatedPartnerId, cu.partnerId!)); else if (partnerId) filters.push(eq(financialItems.relatedPartnerId, Number(partnerId)));
+  if (status) filters.push(eq(financialItems.status, status)); if (from) filters.push(sql`${financialItems.createdAt} >= ${new Date(from)}`); if (to) filters.push(sql`${financialItems.createdAt} <= ${new Date(to)}`);
+  const rows = await db.select({ id: financialItems.id, requestId: financialItems.relatedRequestId, srNumber: requests.srNumber, partnerId: financialItems.relatedPartnerId, partnerName: partners.name, customerName: customers.name, packageName: packages.name, amount: financialItems.amount, status: financialItems.status, eligibleForClaimAt: financialItems.eligibleForClaimAt, isVoided: financialItems.isVoided, claimId: financialItems.claimId, settlementId: financialItems.settlementId, createdAt: financialItems.createdAt }).from(financialItems).leftJoin(requests, eq(requests.id, financialItems.relatedRequestId)).leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId)).leftJoin(partners, eq(partners.id, financialItems.relatedPartnerId)).leftJoin(packages, eq(packages.id, financialItems.relatedPackageId)).where(and(...filters)).orderBy(desc(financialItems.createdAt)).limit(500);
   res.json(rows);
 });
 
-partnerCommissionsRouter.get("/:id", requirePerm("partner_commissions:view"), async (req, res) => {
-  const id = Number(req.params.id);
-  const cu = getUser(req)!;
-  const [pc] = await db.select().from(partnerCommissions).where(eq(partnerCommissions.id, id));
-  if (!pc) return res.status(404).json({ error: "not_found" });
-  if (partnerScoped(cu) && pc.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-  const history = await db
-    .select({
-      id: partnerCommissionStatusHistory.id,
-      fromStatus: partnerCommissionStatusHistory.fromStatus,
-      toStatus: partnerCommissionStatusHistory.toStatus,
-      reason: partnerCommissionStatusHistory.reason,
-      createdAt: partnerCommissionStatusHistory.createdAt,
-      userName: users.name,
-    })
-    .from(partnerCommissionStatusHistory)
-    .leftJoin(users, eq(users.id, partnerCommissionStatusHistory.changedByUserId))
-    .where(eq(partnerCommissionStatusHistory.partnerCommissionId, id))
-    .orderBy(desc(partnerCommissionStatusHistory.createdAt));
-  res.json({ commission: pc, history });
-});
-
-const transitionInput = z.object({
-  toStatus: z.enum(PARTNER_COMMISSION_STATUSES as unknown as [string, ...string[]]),
-  reason: z.string().optional().nullable(),
-});
-
-partnerCommissionsRouter.post("/:id/transition", requirePerm("partner_commissions:change_status"), async (req, res) => {
-  const id = Number(req.params.id);
-  const parsed = transitionInput.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
-  const cu = getUser(req)!;
-  const [pc] = await db.select().from(partnerCommissions).where(eq(partnerCommissions.id, id));
-  if (!pc) return res.status(404).json({ error: "not_found" });
-  if (partnerScoped(cu) && pc.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-
-  // CLAIM/SETTLEMENT-GATED transitions cannot be hit directly. The normal
-  // forward path is: createClaim → approveClaim → createSettlement, each of
-  // which advances the partner_commission status atomically. Direct calls
-  // are treated as a manual override and require the dedicated permission.
-  const gated = ["in_claim", "claim_approved", "ready_for_settlement", "settled_successfully"];
-  const toStatus = parsed.data.toStatus as PartnerCommissionStatus;
-  const isOverride = gated.includes(toStatus);
-  if (isOverride && !cu.permissions?.includes("partner_commissions:manual_override")) {
-    return res.status(403).json({
-      error: "forbidden",
-      detail: "manual_override_required",
-      hint: "هذا الانتقال يحدث تلقائياً عبر مسار المطالبة/التسوية. للاستثناء استخدم صلاحية التجاوز اليدوي.",
-    });
-  }
-  const result = await transitionPartnerCommission({
-    id, toStatus, userId: cu.id, reason: parsed.data.reason,
-    viaManualOverride: isOverride,
-  });
-  if (!result.ok) return res.status(409).json(result);
-  res.json({ ok: true });
-});
-
-const adjustInput = z.object({
-  amount: z.coerce.number().min(0),
-  reason: z.string().min(2),
-});
-
-partnerCommissionsRouter.post("/:id/adjust", requirePerm("partner_commissions:edit"), async (req, res) => {
-  const id = Number(req.params.id);
-  const parsed = adjustInput.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
-  const cu = getUser(req)!;
-  if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
-    return res.status(403).json({ error: "forbidden" });
-  }
-  const [pc] = await db.select().from(partnerCommissions).where(eq(partnerCommissions.id, id));
-  if (!pc) return res.status(404).json({ error: "not_found" });
-  await db.update(partnerCommissions).set({ amount: String(parsed.data.amount), notes: parsed.data.reason, updatedAt: new Date() }).where(eq(partnerCommissions.id, id));
-  await db.insert(partnerCommissionStatusHistory).values({
-    partnerCommissionId: id, fromStatus: pc.status, toStatus: pc.status, reason: `adjusted to ${parsed.data.amount}: ${parsed.data.reason}`, changedByUserId: cu.id,
-  });
-  res.json({ ok: true });
+partnerCommissionsRouter.post("/:id/claims", requirePerm("claims:create"), async (req, res) => {
+  const cu = getUser(req)!; const id = Number(req.params.id);
+  const [item] = await db.select().from(financialItems).where(eq(financialItems.id, id));
+  if (!item || item.type !== "partner_commission_item") return res.status(404).json({ error: "not_found_or_type_mismatch" });
+  if (partnerScoped(cu) && item.relatedPartnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
+  const [r] = await db.select({ status: requests.status }).from(requests).where(eq(requests.id, item.relatedRequestId));
+  if (item.isVoided || !item.isClaimable || item.status !== "not_added_to_claim" || (item.eligibleForClaimAt && item.eligibleForClaimAt > new Date()) || !r || r.status !== "activated") return res.status(409).json({ error: "ineligible_item" });
+  res.json(await createClaim({ type: "partner_commission_claim", partnerId: item.relatedPartnerId, itemIds: [id], userId: cu.id }));
 });
