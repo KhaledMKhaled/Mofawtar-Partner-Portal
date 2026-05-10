@@ -4,6 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/AppShell";
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
+
+const PAGE_SIZE = 50;
 
 interface Customer360 {
   customer: {
@@ -183,11 +186,17 @@ export function Customer360Page() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="stamp-card p-5">
-          <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("requests.timeline")}</h3>
+        <PaginatedSection
+          title={t("requests.timeline")}
+          total={events.length}
+          pageSize={PAGE_SIZE}
+        >
+          {(page) => {
+            const slice = events.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+            return (
           <ul className="space-y-3 text-sm">
-            {events.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
-            {events.map((e) => {
+            {slice.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
+            {slice.map((e) => {
               const req = requests.find((r) => r.id === e.requestId);
               const isCreation = e.kind === "status" && !e.fromStatus && e.toStatus === "draft_sr";
               const onBehalf =
@@ -228,12 +237,20 @@ export function Customer360Page() {
               );
             })}
           </ul>
-        </div>
-        <div className="stamp-card p-5">
-          <h3 className="text-sm font-semibold text-violet-700 mb-3">{t("nav.audit_log")}</h3>
+            );
+          }}
+        </PaginatedSection>
+        <PaginatedSection
+          title={t("nav.audit_log")}
+          total={audit.length}
+          pageSize={PAGE_SIZE}
+        >
+          {(page) => {
+            const slice = audit.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+            return (
           <ul className="space-y-3 text-sm">
-            {audit.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
-            {audit.map((a) => {
+            {slice.length === 0 && <li className="text-muted">{t("common.noData")}</li>}
+            {slice.map((a) => {
               const req = a.requestId ? requests.find((r) => r.id === a.requestId) : null;
               const isCreation = a.action === "request.draft_created";
               const onBehalf =
@@ -260,8 +277,58 @@ export function Customer360Page() {
               );
             })}
           </ul>
-        </div>
+            );
+          }}
+        </PaginatedSection>
       </div>
+    </div>
+  );
+}
+
+function PaginatedSection({
+  title,
+  total,
+  pageSize,
+  children,
+}: {
+  title: string;
+  total: number;
+  pageSize: number;
+  children: (page: number) => React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  return (
+    <div className="stamp-card p-5">
+      <h3 className="text-sm font-semibold text-violet-700 mb-3">{title}</h3>
+      <div className="max-h-[28rem] overflow-y-auto pe-1">
+        {children(safePage)}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-violet-100">
+          <button
+            type="button"
+            className="btn-ghost text-xs disabled:opacity-40"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+          >
+            {t("common.previous")}
+          </button>
+          <div className="text-xs text-muted">
+            {t("common.pageOf", { page: safePage + 1, total: totalPages })}
+          </div>
+          <button
+            type="button"
+            className="btn-ghost text-xs disabled:opacity-40"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={safePage >= totalPages - 1}
+          >
+            {t("common.next")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

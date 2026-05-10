@@ -42,6 +42,8 @@ export const en = {
     close: "Close",
     back: "Back",
     next: "Next",
+    previous: "Previous",
+    pageOf: "Page {{page}} of {{total}}",
     submit: "Submit",
     saved: "Saved.",
     failed: "Something went wrong.",

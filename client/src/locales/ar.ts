@@ -43,6 +43,8 @@ export const ar: Translations = {
     confirm: "تأكيد",
     close: "إغلاق",
     back: "رجوع",
+    previous: "السابق",
+    pageOf: "صفحة {{page}} من {{total}}",
     next: "التالي",
     submit: "إرسال",
     saved: "تم الحفظ.",
