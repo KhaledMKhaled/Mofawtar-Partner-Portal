@@ -26,7 +26,7 @@ export function SalesCommissionsPage() {
   const [status, setStatus] = useState("");
   const list = useQuery({
     queryKey: ["sales-commissions", status],
-    queryFn: () => api<Row[]>(`/api/sales-commissions?${new URLSearchParams({ status }).toString()}`),
+    queryFn: () => api<Row[]>(`/api/sales-commissions?${new URLSearchParams({ type: "sales_commission_item", status }).toString()}`),
   });
   const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
 

@@ -56,8 +56,7 @@ export function PaymentDetailPage() {
   const { payment, history } = detail.data;
   const allowed = ORDER_PAYMENT_TRANSITIONS[payment.status] ?? [];
   const canChange = can(user, "payments:change_status");
-  const isCompany = user?.roleKey === "company_super_admin" || user?.roleKey === "company_accountant";
-  const visibleAllowed = allowed.filter((s) => isCompany || (s !== "received_by_company" && s !== "settled"));
+  const visibleAllowed = allowed;
 
   return (
     <div>
@@ -71,7 +70,7 @@ export function PaymentDetailPage() {
               onChange={(e) => {
                 const v = e.target.value;
                 if (!v) return;
-                const reason = ["refunded", "cancelled"].includes(v) ? prompt(t("requests.reason") as string) ?? "" : undefined;
+                const reason = undefined;
                 mutate.mutate({ toStatus: v, reason });
                 e.currentTarget.value = "";
               }}>

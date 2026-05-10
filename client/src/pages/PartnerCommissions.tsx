@@ -34,7 +34,7 @@ export function PartnerCommissionsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const list = useQuery({
     queryKey: ["partner-commissions", status],
-    queryFn: () => api<Row[]>(`/api/partner-commissions?${new URLSearchParams({ status }).toString()}`),
+    queryFn: () => api<Row[]>(`/api/partner-commissions?${new URLSearchParams({ type: "partner_commission_item", status }).toString()}`),
   });
   const mutate = useMutation({
     mutationFn: (vars: { id: number; toStatus: string; reason?: string }) =>
@@ -49,7 +49,7 @@ export function PartnerCommissionsPage() {
   const canClaim = can(user, "claims:create");
 
   const toggleAll = () => {
-    const eligible = (list.data ?? []).filter((r) => r.status === "eligible_for_claim").map((r) => r.id);
+    const eligible = (list.data ?? []).filter((r) => r.status === "not_added_to_claim").map((r) => r.id);
     if (selected.size === eligible.length) setSelected(new Set());
     else setSelected(new Set(eligible));
   };
@@ -75,7 +75,7 @@ export function PartnerCommissionsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th><input type="checkbox" checked={selected.size > 0 && selected.size === (list.data ?? []).filter((r) => r.status === "eligible_for_claim").length} onChange={toggleAll} /></th>
+              <th><input type="checkbox" checked={selected.size > 0 && selected.size === (list.data ?? []).filter((r) => r.status === "not_added_to_claim").length} onChange={toggleAll} /></th>
               <th>{t("requests.sr")}</th>
               <th>{t("common.customer")}</th>
               <th>{t("common.partner")}</th>
@@ -92,7 +92,7 @@ export function PartnerCommissionsPage() {
             {list.data?.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted">{t("common.noData")}</td></tr>}
             {list.data?.map((r) => {
               const allowed = PARTNER_COMMISSION_TRANSITIONS[r.status] ?? [];
-              const isEligible = r.status === "eligible_for_claim";
+              const isEligible = r.status === "not_added_to_claim";
               return (
                 <tr key={r.id}>
                   <td>{isEligible ? (
@@ -117,7 +117,7 @@ export function PartnerCommissionsPage() {
                         onChange={(e) => {
                           const v = e.target.value;
                           if (!v) return;
-                          const reason = ["rejected","adjusted"].includes(v) ? prompt(t("requests.reason") as string) ?? "" : undefined;
+                          const reason = undefined;
                           mutate.mutate({ id: r.id, toStatus: v, reason });
                           e.currentTarget.value = "";
                         }}>
