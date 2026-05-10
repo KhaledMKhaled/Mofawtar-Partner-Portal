@@ -44,7 +44,6 @@ const ICONS: Record<Module, IconType> = {
   partner_commissions: HandCoins,
   sales_commissions: CircleDollarSign,
   claims: ClipboardList,
-  payout_batches: Banknote,
   settlements: Banknote,
   ownership: ShieldCheck,
   reports: FileBarChart2,
@@ -66,7 +65,6 @@ const ROUTES: Partial<Record<Module, string>> = {
   partner_commissions: "/partner-commissions",
   sales_commissions: "/sales-commissions",
   claims: "/claims",
-  payout_batches: "/payout-batches",
   settlements: "/settlements",
   ownership: "/ownership",
   reports: "/reports",
@@ -150,7 +148,7 @@ export function AppShell() {
   const navSections: { key: string; items: Module[] }[] = [
     { key: "overview",       items: allowed(["dashboard"]) },
     { key: "operations",     items: allowed(["customers", "requests", "packages"]) },
-    { key: "financial",      items: allowed(["payments", "partner_commissions", "sales_commissions", "claims", "settlements", "payout_batches"]) },
+    { key: "financial",      items: allowed(["payments", "partner_commissions", "sales_commissions", "claims", "settlements"]) },
     { key: "administration", items: allowed(["partners", "users", "roles", "ownership"]) },
     { key: "system",         items: allowed(["reports", "audit_log", "excel_import", "settings"]) },
   ].filter((s) => s.items.length > 0);

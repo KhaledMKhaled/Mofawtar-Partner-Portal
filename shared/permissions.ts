@@ -11,7 +11,6 @@ export const MODULES = [
   "partner_commissions",
   "sales_commissions",
   "claims",
-  "payout_batches",
   "settlements",
   "ownership",
   "reports",
@@ -77,7 +76,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
       "partner_commissions",
       "sales_commissions",
       "claims",
-      "payout_batches",
       "settlements",
       "reports"
     ),
@@ -146,12 +144,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
 export const DEFAULT_NAVIGATION: Record<RoleKey, Module[]> = {
   company_super_admin: [
     "dashboard","partners","users","roles","packages","customers","requests",
-    "payments","partner_commissions","sales_commissions","claims","payout_batches","settlements",
+    "payments","partner_commissions","sales_commissions","claims","settlements",
     "ownership","reports","audit_log","settings",
   ],
   company_accountant: [
     "dashboard","requests","payments","partner_commissions","sales_commissions",
-    "claims","payout_batches","settlements","reports","audit_log",
+    "claims","settlements","reports","audit_log",
   ],
   partner_admin: [
     "dashboard","users","customers","requests","payments","partner_commissions",

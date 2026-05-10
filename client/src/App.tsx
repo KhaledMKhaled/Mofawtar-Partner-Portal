@@ -28,8 +28,6 @@ const PartnerCommissionsPage = lazy(() => import("./pages/PartnerCommissions").t
 const SalesCommissionsPage = lazy(() => import("./pages/SalesCommissions").then(m => ({ default: m.SalesCommissionsPage })));
 const ClaimsPage = lazy(() => import("./pages/Claims").then(m => ({ default: m.ClaimsPage })));
 const ClaimDetailPage = lazy(() => import("./pages/Claims").then(m => ({ default: m.ClaimDetailPage })));
-const PayoutBatchesPage = lazy(() => import("./pages/PayoutBatches").then(m => ({ default: m.PayoutBatchesPage })));
-const PayoutBatchDetailPage = lazy(() => import("./pages/PayoutBatches").then(m => ({ default: m.PayoutBatchDetailPage })));
 const SettlementsPage = lazy(() => import("./pages/Settlements").then(m => ({ default: m.SettlementsPage })));
 const SettlementDetailPage = lazy(() => import("./pages/Settlements").then(m => ({ default: m.SettlementDetailPage })));
 const ReportsPage = lazy(() => import("./pages/Reports").then(m => ({ default: m.ReportsPage })));
@@ -87,8 +85,8 @@ export default function App() {
           <Route path="/sales-commissions" element={<Gate module="sales_commissions"><SalesCommissionsPage /></Gate>} />
           <Route path="/claims" element={<Gate module="claims"><ClaimsPage /></Gate>} />
           <Route path="/claims/:id" element={<Gate module="claims"><ClaimDetailPage /></Gate>} />
-          <Route path="/payout-batches" element={<Gate module="payout_batches"><PayoutBatchesPage /></Gate>} />
-          <Route path="/payout-batches/:id" element={<Gate module="payout_batches"><PayoutBatchDetailPage /></Gate>} />
+          <Route path="/payout-batches" element={<Navigate to="/claims?type=sales_commission" replace />} />
+          <Route path="/payout-batches/:id" element={<Navigate to="/claims?type=sales_commission" replace />} />
           <Route path="/settlements" element={<Gate module="settlements"><SettlementsPage /></Gate>} />
           <Route path="/settlements/:id" element={<Gate module="settlements"><SettlementDetailPage /></Gate>} />
           <Route path="/reports" element={<Gate module="reports"><ReportsPage /></Gate>} />

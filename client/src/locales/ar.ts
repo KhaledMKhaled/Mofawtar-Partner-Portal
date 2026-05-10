@@ -71,7 +71,6 @@ export const ar: Translations = {
     partner_commissions: "عمولات الشركاء",
     sales_commissions: "عمولات المبيعات",
     claims: "المطالبات",
-    payout_batches: "دفعات الصرف",
     settlements: "التسويات",
     ownership: "ملكية العملاء",
     reports: "التقارير",

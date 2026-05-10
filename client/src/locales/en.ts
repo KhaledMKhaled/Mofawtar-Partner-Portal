@@ -69,7 +69,6 @@ export const en = {
     partner_commissions: "Partner Commissions",
     sales_commissions: "Sales Commissions",
     claims: "Claims",
-    payout_batches: "Payout Batches",
     settlements: "Settlements",
     ownership: "Ownership",
     reports: "Reports",
