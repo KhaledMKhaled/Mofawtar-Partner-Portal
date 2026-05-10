@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
-import { financialItems, customers, partners, packages, requests, users } from "../schema.js";
+import { financialItems, customers, partners, packages, requests, teamAssignments, users } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { createClaim } from "../financial.js";
 
@@ -11,6 +11,7 @@ salesCommissionsRouter.get("/", requirePerm("sales_commissions:view"), async (re
   const cu = getUser(req)!; const { status, partnerId, salesUserId, from, to } = req.query as Record<string, string | undefined>;
   const filters: SQL[] = [eq(financialItems.type, "sales_commission_item")];
   if (cu.roleKey === "sales") filters.push(eq(financialItems.relatedSalesUserId, cu.id));
+  else if (cu.roleKey === "team_leader") filters.push(sql`${financialItems.relatedSalesUserId} IN (SELECT ${teamAssignments.salesUserId} FROM ${teamAssignments} WHERE ${teamAssignments.teamLeaderId} = ${cu.id})`);
   else if (partnerId) filters.push(eq(financialItems.relatedPartnerId, Number(partnerId)));
   if (salesUserId) filters.push(eq(financialItems.relatedSalesUserId, Number(salesUserId)));
   if (status) filters.push(eq(financialItems.status, status)); if (from) filters.push(sql`${financialItems.createdAt} >= ${new Date(from)}`); if (to) filters.push(sql`${financialItems.createdAt} <= ${new Date(to)}`);
