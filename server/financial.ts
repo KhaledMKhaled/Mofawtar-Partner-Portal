@@ -313,6 +313,18 @@ export async function transitionOrderPayment(
     toStatus: OrderPaymentStatus;
     userId: number;
     reason?: string | null;
+    // `viaSettlement` is set to true ONLY by `createSettlementForPartner`
+    // and the lifecycle orchestrator. It permits the two terminal
+    // company-side transitions (`received_by_company`, `settled`) which
+    // otherwise must NOT happen via the public payments endpoint without
+    // an explicit manual override. This enforces the business rule:
+    // "once a payment reaches net_amount_due_to_company it cannot be
+    // settled except through a claim → settlement flow."
+    viaSettlement?: boolean;
+    // `viaManualOverride` is set by the route handler when a user with
+    // `payments:manual_override` permission deliberately bypasses the
+    // claim-gated path (e.g. company accountant fixing a stuck record).
+    viaManualOverride?: boolean;
   },
   executor: DbExecutor = db,
 ): Promise<{ ok: true } | { ok: false; error: string; allowed?: OrderPaymentStatus[] }> {
@@ -321,6 +333,18 @@ export async function transitionOrderPayment(
   const from = op.status as OrderPaymentStatus;
   if (!isAllowedOrderPaymentTransition(from, opts.toStatus)) {
     return { ok: false, error: "invalid_transition" };
+  }
+  // CLAIM-GATED RULE: refuse to move forward into company-side terminal
+  // states unless the caller is the trusted settlement primitive or the
+  // user explicitly invoked manual override. Refunds/cancellations are
+  // not gated by this rule — only the forward path.
+  const claimGated: OrderPaymentStatus[] = ["received_by_company", "settled"];
+  if (
+    claimGated.includes(opts.toStatus) &&
+    !opts.viaSettlement &&
+    !opts.viaManualOverride
+  ) {
+    return { ok: false, error: "requires_settlement_or_override" };
   }
   const update: Partial<typeof orderPayments.$inferInsert> = { status: opts.toStatus, updatedAt: new Date() };
   if (opts.toStatus === "received_by_company") update.receivedAt = new Date();
@@ -770,10 +794,21 @@ export async function createSettlement(opts: {
       })
       .returning();
 
-    // Mark order_payments as settled & link
+    // Mark order_payments as settled & link. `viaSettlement: true` is the
+    // ONLY way to move an OP into `received_by_company`/`settled` without
+    // an explicit manual-override request (see transitionOrderPayment).
     for (const o of ops) {
+      // Walk the OP through `received_by_company` first if it isn't there
+      // yet, so the audit trail shows the full company-side path.
+      if (o.status === "net_amount_due_to_company") {
+        const rR = await transitionOrderPayment(
+          { id: o.id, toStatus: "received_by_company", userId: opts.userId, reason: `settlement ${settlementNumber}`, viaSettlement: true },
+          tx,
+        );
+        if (!rR.ok) throw new Error(`transition_failed:order_payment:${o.id}:${rR.error}`);
+      }
       const r = await transitionOrderPayment(
-        { id: o.id, toStatus: "settled", userId: opts.userId, reason: `settlement ${settlementNumber}` },
+        { id: o.id, toStatus: "settled", userId: opts.userId, reason: `settlement ${settlementNumber}`, viaSettlement: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:order_payment:${o.id}:${r.error}`);

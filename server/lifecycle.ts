@@ -539,7 +539,7 @@ async function applyStageProjection(
       }
       if (op.status === "net_amount_due_to_company") {
         const r1 = await transitionOrderPayment(
-          { id: op.id, toStatus: "received_by_company", userId, reason: reason ?? "net_received" },
+          { id: op.id, toStatus: "received_by_company", userId, reason: reason ?? "net_received", viaSettlement: true },
           tx,
         );
         if (!r1.ok) throw new Error(`op_transition_failed:${r1.error}`);

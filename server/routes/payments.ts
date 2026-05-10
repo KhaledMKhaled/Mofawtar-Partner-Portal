@@ -109,14 +109,30 @@ paymentsRouter.post("/:id(\\d+)/transition", requirePerm("payments:change_status
   if (!op) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && op.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
 
-  // Partner-side users can only progress through partner-side statuses (held_by_partner → net_amount_due_to_company).
-  // Company-side statuses (received_by_company, settled) are restricted to company users.
-  const companyOnly = ["received_by_company", "settled"];
-  if (companyOnly.includes(parsed.data.toStatus) && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
-    return res.status(403).json({ error: "forbidden" });
+  // Company-side statuses (received_by_company, settled) are restricted
+  // to company users AND are claim-gated: the normal path is via
+  // settlement of an approved claim, which auto-transitions the payment.
+  // A direct call to either of these statuses is therefore treated as a
+  // MANUAL OVERRIDE and requires the dedicated permission.
+  const claimGated = ["received_by_company", "settled"];
+  if (claimGated.includes(parsed.data.toStatus)) {
+    if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") {
+      return res.status(403).json({ error: "forbidden", detail: "company_users_only" });
+    }
+    if (!cu.permissions?.includes("payments:manual_override")) {
+      return res.status(403).json({
+        error: "forbidden",
+        detail: "manual_override_required",
+        hint: "هذا الانتقال يحدث تلقائياً عند تسوية المطالبة. للاستثناء استخدم صلاحية التجاوز اليدوي.",
+      });
+    }
   }
   const result = await transitionOrderPayment({
-    id, toStatus: parsed.data.toStatus as OrderPaymentStatus, userId: cu.id, reason: parsed.data.reason,
+    id,
+    toStatus: parsed.data.toStatus as OrderPaymentStatus,
+    userId: cu.id,
+    reason: parsed.data.reason,
+    viaManualOverride: claimGated.includes(parsed.data.toStatus),
   });
   if (!result.ok) return res.status(409).json(result);
   res.json({ ok: true });
