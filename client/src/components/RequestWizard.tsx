@@ -590,13 +590,6 @@ export function RequestWizard({
                   <Row label="Name" value={customer.name} />
                   <Row label="Tax Card" value={tax} />
                   {customer.commercialRegistry && <Row label="CR No." value={customer.commercialRegistry} />}
-                  {customer.nationalId && <Row label="National ID" value={customer.nationalId} />}
-                  {customer.primaryPhone && (
-                    <Row label="Phone" value={`${customer.primaryPhone}${customer.primaryPhoneWhatsapp ? " (WA)" : ""}`} />
-                  )}
-                  {customer.altPhone && (
-                    <Row label="Alt Phone" value={`${customer.altPhone}${customer.altPhoneWhatsapp ? " (WA)" : ""}`} />
-                  )}
                   {customer.email && <Row label="Email" value={customer.email} small />}
                   <Sep />
                   <div style={{ fontWeight: 700 }}>REQUEST</div>
