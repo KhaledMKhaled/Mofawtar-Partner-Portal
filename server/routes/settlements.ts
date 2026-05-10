@@ -3,8 +3,7 @@ import { and, desc, eq, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
-  settlements, partners, claims, claimItems,
-  orderPayments, partnerCommissions, salesCommissions,
+  settlements, partners, claims, claimItems, financialItems,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { createSettlement } from "../financial.js";
@@ -64,8 +63,8 @@ settlementsRouter.get("/preview", requirePerm("settlements:view"), async (req, r
     type: c.type,
     totalAmount: Number(c.totalAmount),
     itemCount: items.length,
-    direction: c.type === "payment" ? "partner_to_company"
-             : c.type === "partner_commission" ? "company_to_partner"
+    direction: c.type === "payment_claim" ? "partner_to_company"
+             : c.type === "partner_commission_claim" ? "company_to_partner"
              : "partner_to_sales",
   });
 });
@@ -76,28 +75,15 @@ settlementsRouter.get("/:id", requirePerm("settlements:view"), async (req, res) 
   const [s] = await db.select().from(settlements).where(eq(settlements.id, id));
   if (!s) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && s.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-  // Surface the children that this settlement closed out, by type.
-  let payments: Array<{ id: number; grossAmount: string; netDueToCompany: string }> = [];
-  let commissions: Array<{ id: number; amount: string }> = [];
-  let salesCommissionsList: Array<{ id: number; amount: string }> = [];
-  if (s.type === "payment") {
-    payments = await db.select({
-      id: orderPayments.id,
-      grossAmount: orderPayments.grossAmount,
-      netDueToCompany: orderPayments.netDueToCompany,
-    }).from(orderPayments).where(eq(orderPayments.settlementId, id));
-  } else if (s.type === "partner_commission") {
-    commissions = await db.select({
-      id: partnerCommissions.id,
-      amount: partnerCommissions.amount,
-    }).from(partnerCommissions).where(eq(partnerCommissions.settlementId, id));
-  } else if (s.type === "sales_commission") {
-    salesCommissionsList = await db.select({
-      id: salesCommissions.id,
-      amount: salesCommissions.amount,
-    }).from(salesCommissions).where(eq(salesCommissions.settlementId, id));
-  }
-  res.json({ settlement: s, payments, commissions, salesCommissions: salesCommissionsList });
+  const items = await db.select({
+    id: financialItems.id,
+    type: financialItems.type,
+    amount: financialItems.amount,
+    status: financialItems.status,
+  }).from(claimItems)
+    .leftJoin(financialItems, eq(financialItems.id, claimItems.financialItemId))
+    .where(eq(claimItems.claimId, s.claimId));
+  res.json({ settlement: s, items });
 });
 
 const createInput = z.object({
