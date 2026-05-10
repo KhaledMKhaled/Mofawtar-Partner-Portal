@@ -83,23 +83,37 @@ export async function createClaim(opts: { type: ClaimType; partnerId: number; it
 }
 
 export async function approveClaim(claimId: number, userId: number): Promise<void> {
-  const [claim] = await db.select().from(claims).where(eq(claims.id, claimId));
-  if (!claim) throw new Error("claim_not_found");
-  if (claim.status !== "draft") throw new Error("claim_not_draft");
-  await db.update(claims).set({ status: "approved", approvedAt: new Date(), approvedBy: userId }).where(eq(claims.id, claimId));
+  const [updated] = await db.update(claims)
+    .set({ status: "approved", approvedAt: new Date(), approvedBy: userId })
+    .where(and(eq(claims.id, claimId), eq(claims.status, "draft")))
+    .returning({ id: claims.id });
+
+  if (!updated) {
+    const [claim] = await db.select({ id: claims.id }).from(claims).where(eq(claims.id, claimId));
+    if (!claim) throw new Error("claim_not_found");
+    throw new Error("claim_not_draft");
+  }
+
   await audit({ userId, action: "claim.approved", entityType: "claim", entityId: claimId });
 }
 
 export async function rejectClaim(claimId: number, userId: number, reason: string): Promise<void> {
-  const [claim] = await db.select().from(claims).where(eq(claims.id, claimId));
-  if (!claim) throw new Error("claim_not_found");
-  if (claim.status !== "draft") throw new Error("claim_not_draft");
-
-  const items = await db.select().from(claimItems).where(eq(claimItems.claimId, claimId));
   await db.transaction(async (tx) => {
-    await tx.update(claims).set({ status: "rejected", rejectedAt: new Date(), rejectedBy: userId, rejectionReason: reason }).where(eq(claims.id, claimId));
+    const [updated] = await tx.update(claims)
+      .set({ status: "rejected", rejectedAt: new Date(), rejectedBy: userId, rejectionReason: reason })
+      .where(and(eq(claims.id, claimId), eq(claims.status, "draft")))
+      .returning({ id: claims.id });
+
+    if (!updated) {
+      const [claim] = await tx.select({ id: claims.id }).from(claims).where(eq(claims.id, claimId));
+      if (!claim) throw new Error("claim_not_found");
+      throw new Error("claim_not_draft");
+    }
+
+    const items = await tx.select().from(claimItems).where(eq(claimItems.claimId, claimId));
     for (const it of items) await tx.update(financialItems).set({ status: "not_added_to_claim", claimId: null }).where(eq(financialItems.id, it.financialItemId));
   });
+
   await audit({ userId, action: "claim.rejected", entityType: "claim", entityId: claimId, note: reason });
 }
 
