@@ -340,264 +340,145 @@ export type Package = typeof packages.$inferSelect;
 export type CommissionRule = typeof commissionRules.$inferSelect;
 
 // ============================================================================
-// Phase 3: Financial separation — Order Payments, Partner Commissions,
-// Sales Commissions, Claims, Payout Batches, Settlements.
+// Greenfield unified financial architecture
 // ============================================================================
 
-export const orderPayments = pgTable(
-  "order_payments",
+export const financialItems = pgTable(
+  "financial_items",
   {
     id: serial("id").primaryKey(),
-    requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
-    customerId: integer("customer_id").notNull().references(() => customers.id),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    packageId: integer("package_id").references(() => packages.id),
-    grossAmount: numeric("gross_amount", { precision: 14, scale: 2 }).notNull(),
+    type: varchar("type", { length: 40 }).notNull(), // payment_item | partner_commission_item | sales_commission_item
+    status: varchar("status", { length: 40 }).notNull().default("not_added_to_claim"),
+
+    relatedRequestId: integer("related_request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+    relatedSrNumber: varchar("related_sr_number", { length: 80 }),
+    relatedCustomerId: integer("related_customer_id").notNull().references(() => customers.id),
+    relatedPartnerId: integer("related_partner_id").notNull().references(() => partners.id),
+    relatedSalesUserId: integer("related_sales_user_id").references(() => users.id),
+    relatedPackageId: integer("related_package_id").references(() => packages.id),
+    operationType: varchar("operation_type", { length: 40 }),
+
+    grossCustomerAmount: numeric("gross_customer_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+    itemPriceBeforeTax: numeric("item_price_before_tax", { precision: 14, scale: 2 }).notNull().default("0"),
+    taxPercentage: numeric("tax_percentage", { precision: 6, scale: 3 }).notNull().default("0"),
     taxAmount: numeric("tax_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    netAmount: numeric("net_amount", { precision: 14, scale: 2 }).notNull(),
+    finalPriceAfterTax: numeric("final_price_after_tax", { precision: 14, scale: 2 }).notNull().default("0"),
+    commissionBase: numeric("commission_base", { precision: 14, scale: 2 }).notNull().default("0"),
+    partnerCommissionPercentage: numeric("partner_commission_percentage", { precision: 6, scale: 3 }).notNull().default("0"),
     partnerCommissionAmount: numeric("partner_commission_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    netDueToCompany: numeric("net_due_to_company", { precision: 14, scale: 2 }).notNull().default("0"),
-    status: varchar("status", { length: 40 }).notNull().default("pending_collection_confirmation"),
-    // Payment-claim and payment-settlement linkage (added with the
-    // unified 3-claim / 3-settlement model).
+    salesCommissionPercentage: numeric("sales_commission_percentage", { precision: 6, scale: 3 }).notNull().default("0"),
+    salesCommissionAmount: numeric("sales_commission_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+    netAmountDueToCompany: numeric("net_amount_due_to_company", { precision: 14, scale: 2 }).notNull().default("0"),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+
+    eligibleForClaimAt: timestamp("eligible_for_claim_at"),
+    isClaimable: boolean("is_claimable").notNull().default(false),
+    claimBlockReason: text("claim_block_reason"),
+
     claimId: integer("claim_id"),
     settlementId: integer("settlement_id"),
-    receivedAt: timestamp("received_at"),
+
+    isVoided: boolean("is_voided").notNull().default(false),
+    voidType: varchar("void_type", { length: 40 }),
+    voidReason: text("void_reason"),
+    voidedAt: timestamp("voided_at"),
+    voidedBy: integer("voided_by").references(() => users.id),
+    isAdjustment: boolean("is_adjustment").notNull().default(false),
+    adjustmentForItemId: integer("adjustment_for_item_id"),
+    adjustmentReason: text("adjustment_reason"),
+
     settledAt: timestamp("settled_at"),
-    notes: text("notes"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => ({
-    requestIdx: index("order_payments_request_idx").on(t.requestId),
-    partnerIdx: index("order_payments_partner_idx").on(t.partnerId),
-    statusIdx: index("order_payments_status_idx").on(t.status),
+    typeIdx: index("financial_items_type_idx").on(t.type),
+    statusIdx: index("financial_items_status_idx").on(t.status),
+    requestIdx: index("financial_items_request_idx").on(t.relatedRequestId),
+    partnerIdx: index("financial_items_partner_idx").on(t.relatedPartnerId),
+    customerIdx: index("financial_items_customer_idx").on(t.relatedCustomerId),
   })
 );
 
-export const orderPaymentStatusHistory = pgTable(
-  "order_payment_status_history",
-  {
-    id: serial("id").primaryKey(),
-    orderPaymentId: integer("order_payment_id").notNull(),
-    fromStatus: varchar("from_status", { length: 40 }),
-    toStatus: varchar("to_status", { length: 40 }).notNull(),
-    reason: text("reason"),
-    changedByUserId: integer("changed_by_user_id"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    opFk: foreignKey({
-      name: "opsh_order_payment_id_fk",
-      columns: [t.orderPaymentId],
-      foreignColumns: [orderPayments.id],
-    }).onDelete("cascade"),
-  })
-);
+export const financialEvents = pgTable("financial_events", {
+  id: serial("id").primaryKey(),
+  financialItemId: integer("financial_item_id").references(() => financialItems.id, { onDelete: "set null" }),
+  requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+  customerId: integer("customer_id").notNull().references(() => customers.id),
+  partnerId: integer("partner_id").notNull().references(() => partners.id),
+  salesUserId: integer("sales_user_id").references(() => users.id),
+  eventType: varchar("event_type", { length: 60 }).notNull(),
+  eventNote: text("event_note"),
+  amount: numeric("amount", { precision: 14, scale: 2 }),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
-export const partnerCommissions = pgTable(
-  "partner_commissions",
-  {
-    id: serial("id").primaryKey(),
-    requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
-    orderPaymentId: integer("order_payment_id").references(() => orderPayments.id),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    customerId: integer("customer_id").notNull().references(() => customers.id),
-    packageId: integer("package_id").references(() => packages.id),
-    baseAmount: numeric("base_amount", { precision: 14, scale: 2 }).notNull(),
-    pct: numeric("pct", { precision: 6, scale: 3 }).notNull(),
-    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
-    safetyEndsAt: timestamp("safety_ends_at"),
-    status: varchar("status", { length: 40 }).notNull().default("in_safety_period"),
-    claimId: integer("claim_id"),
-    settlementId: integer("settlement_id"),
-    notes: text("notes"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    partnerIdx: index("partner_commissions_partner_idx").on(t.partnerId),
-    statusIdx: index("partner_commissions_status_idx").on(t.status),
-    requestIdx: index("partner_commissions_request_idx").on(t.requestId),
-  })
-);
-
-export const partnerCommissionStatusHistory = pgTable(
-  "partner_commission_status_history",
-  {
-    id: serial("id").primaryKey(),
-    partnerCommissionId: integer("partner_commission_id").notNull(),
-    fromStatus: varchar("from_status", { length: 40 }),
-    toStatus: varchar("to_status", { length: 40 }).notNull(),
-    reason: text("reason"),
-    changedByUserId: integer("changed_by_user_id"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    pcFk: foreignKey({
-      name: "pcsh_partner_commission_id_fk",
-      columns: [t.partnerCommissionId],
-      foreignColumns: [partnerCommissions.id],
-    }).onDelete("cascade"),
-  })
-);
-
-export const salesCommissions = pgTable(
-  "sales_commissions",
-  {
-    id: serial("id").primaryKey(),
-    requestId: integer("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
-    orderPaymentId: integer("order_payment_id").references(() => orderPayments.id),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    salesUserId: integer("sales_user_id").references(() => users.id),
-    teamLeaderId: integer("team_leader_id").references(() => users.id),
-    customerId: integer("customer_id").notNull().references(() => customers.id),
-    packageId: integer("package_id").references(() => packages.id),
-    baseAmount: numeric("base_amount", { precision: 14, scale: 2 }).notNull(),
-    pct: numeric("pct", { precision: 6, scale: 3 }).notNull(),
-    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
-    status: varchar("status", { length: 40 }).notNull().default("new"),
-    payoutBatchId: integer("payout_batch_id"), // legacy
-    claimId: integer("claim_id"),              // unified sales-commission claim
-    settlementId: integer("settlement_id"),    // unified sales-commission settlement
-    notes: text("notes"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    partnerIdx: index("sales_commissions_partner_idx").on(t.partnerId),
-    salesIdx: index("sales_commissions_sales_idx").on(t.salesUserId),
-    statusIdx: index("sales_commissions_status_idx").on(t.status),
-  })
-);
-
-export const salesCommissionStatusHistory = pgTable(
-  "sales_commission_status_history",
-  {
-    id: serial("id").primaryKey(),
-    salesCommissionId: integer("sales_commission_id").notNull(),
-    fromStatus: varchar("from_status", { length: 40 }),
-    toStatus: varchar("to_status", { length: 40 }).notNull(),
-    reason: text("reason"),
-    changedByUserId: integer("changed_by_user_id"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    scFk: foreignKey({
-      name: "scsh_sales_commission_id_fk",
-      columns: [t.salesCommissionId],
-      foreignColumns: [salesCommissions.id],
-    }).onDelete("cascade"),
-  })
-);
-
-// Unified claims table — `type` discriminates among the 3 claim flavors.
-// One claims row per (partner, type, batch). See claim_items for the
-// polymorphic line items.
 export const claims = pgTable(
   "claims",
   {
     id: serial("id").primaryKey(),
     claimNumber: varchar("claim_number", { length: 60 }).notNull().unique(),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    type: varchar("type", { length: 30 }).notNull(), // 'payment' | 'partner_commission' | 'sales_commission'
+    type: varchar("type", { length: 40 }).notNull(), // payment_claim | partner_commission_claim | sales_commission_claim
     status: varchar("status", { length: 30 }).notNull().default("draft"),
-    autoGenerated: boolean("auto_generated").notNull().default(false),
+    partnerId: integer("partner_id").references(() => partners.id),
+    salesUserId: integer("sales_user_id").references(() => users.id),
+    payoutCycleStart: timestamp("payout_cycle_start", { mode: "date" }),
+    payoutCycleEnd: timestamp("payout_cycle_end", { mode: "date" }),
     totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    notes: text("notes"),
-    submittedAt: timestamp("submitted_at"),
-    approvedAt: timestamp("approved_at"),
-    approvedByUserId: integer("approved_by_user_id"),
-    rejectedAt: timestamp("rejected_at"),
+    createdBy: integer("created_by").references(() => users.id),
+    approvedBy: integer("approved_by").references(() => users.id),
+    rejectedBy: integer("rejected_by").references(() => users.id),
     rejectionReason: text("rejection_reason"),
-    settledAt: timestamp("settled_at"),
     settlementId: integer("settlement_id"),
-    createdByUserId: integer("created_by_user_id"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    approvedAt: timestamp("approved_at"),
+    rejectedAt: timestamp("rejected_at"),
+    settledAt: timestamp("settled_at"),
   },
   (t) => ({
-    partnerIdx: index("claims_partner_idx").on(t.partnerId),
-    statusIdx: index("claims_status_idx").on(t.status),
     typeIdx: index("claims_type_idx").on(t.type),
+    statusIdx: index("claims_status_idx").on(t.status),
+    partnerIdx: index("claims_partner_idx").on(t.partnerId),
   })
 );
 
-// Polymorphic line items: exactly one of the three FK columns must be set,
-// matching the parent claim's `type`. Enforced by a CHECK constraint added
-// in the migration script.
 export const claimItems = pgTable("claim_items", {
   id: serial("id").primaryKey(),
   claimId: integer("claim_id").notNull().references(() => claims.id, { onDelete: "cascade" }),
-  partnerCommissionId: integer("partner_commission_id").references(() => partnerCommissions.id),
-  orderPaymentId: integer("order_payment_id").references(() => orderPayments.id),
-  salesCommissionId: integer("sales_commission_id").references(() => salesCommissions.id),
-  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  financialItemId: integer("financial_item_id").notNull().references(() => financialItems.id, { onDelete: "cascade" }),
+  amountSnapshot: numeric("amount_snapshot", { precision: 14, scale: 2 }).notNull(),
+  commissionBaseSnapshot: numeric("commission_base_snapshot", { precision: 14, scale: 2 }),
+  taxSnapshot: numeric("tax_snapshot", { precision: 14, scale: 2 }),
+  netDueSnapshot: numeric("net_due_snapshot", { precision: 14, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const payoutBatches = pgTable(
-  "payout_batches",
-  {
-    id: serial("id").primaryKey(),
-    batchNumber: varchar("batch_number", { length: 60 }).notNull().unique(),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    cycle: varchar("cycle", { length: 20 }).notNull().default("monthly"),
-    status: varchar("status", { length: 30 }).notNull().default("draft"),
-    totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    notes: text("notes"),
-    submittedAt: timestamp("submitted_at"),
-    approvedAt: timestamp("approved_at"),
-    approvedByUserId: integer("approved_by_user_id"),
-    paidAt: timestamp("paid_at"),
-    createdByUserId: integer("created_by_user_id"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  },
-  (t) => ({
-    partnerIdx: index("payout_batches_partner_idx").on(t.partnerId),
-    statusIdx: index("payout_batches_status_idx").on(t.status),
-  })
-);
-
-export const payoutBatchItems = pgTable("payout_batch_items", {
-  id: serial("id").primaryKey(),
-  payoutBatchId: integer("payout_batch_id").notNull().references(() => payoutBatches.id, { onDelete: "cascade" }),
-  salesCommissionId: integer("sales_commission_id").notNull().references(() => salesCommissions.id),
-  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-// Unified settlements table — `type` matches its bound claim.type and
-// determines the direction of money flow. Netting between OP and PC is
-// gone: each settlement is independent with a single `total_amount` and
-// `direction`.
 export const settlements = pgTable(
   "settlements",
   {
     id: serial("id").primaryKey(),
     settlementNumber: varchar("settlement_number", { length: 60 }).notNull().unique(),
-    partnerId: integer("partner_id").notNull().references(() => partners.id),
-    claimId: integer("claim_id").notNull().references(() => claims.id), // 1-1 with claim
-    type: varchar("type", { length: 30 }).notNull(), // mirrors claims.type
+    type: varchar("type", { length: 40 }).notNull(), // payment_settlement | partner_commission_settlement | sales_commission_settlement
+    status: varchar("status", { length: 30 }).notNull().default("draft"),
     totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    direction: varchar("direction", { length: 30 }).notNull(),
-    notes: text("notes"),
-    createdByUserId: integer("created_by_user_id"),
-    completedAt: timestamp("completed_at"),
+    createdBy: integer("created_by").references(() => users.id),
+    completedBy: integer("completed_by").references(() => users.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    cancellationReason: text("cancellation_reason"),
+    notes: text("notes"),
   },
   (t) => ({
-    partnerIdx: index("settlements_partner_idx").on(t.partnerId),
     typeIdx: index("settlements_type_idx").on(t.type),
+    statusIdx: index("settlements_status_idx").on(t.status),
   })
 );
 
-export type OrderPayment = typeof orderPayments.$inferSelect;
-export type PartnerCommission = typeof partnerCommissions.$inferSelect;
-export type SalesCommission = typeof salesCommissions.$inferSelect;
+export type FinancialItem = typeof financialItems.$inferSelect;
+export type FinancialEvent = typeof financialEvents.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type ClaimItem = typeof claimItems.$inferSelect;
-export type PayoutBatch = typeof payoutBatches.$inferSelect;
-export type PayoutBatchItem = typeof payoutBatchItems.$inferSelect;
 export type Settlement = typeof settlements.$inferSelect;
+
