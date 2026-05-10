@@ -11,7 +11,7 @@ after(async () => {
 
 test("unified financial item lifecycle: activation, claims, settlement, and void indicators", async () => {
   await setupSchema();
-  const fx = await createIsolatedFixture({ salesCommissionEnabled: true, salesCommissionPct: "5" });
+  const fx = await createIsolatedFixture({ salesCommissionEnabled: true, salesCommissionPct: "5", safetyPeriodDays: 0 });
   try {
     const requestId = await createTestRequest(fx, { activated: true });
     await onRequestActivated({ requestId, userId: fx.userId });
@@ -36,7 +36,7 @@ test("unified financial item lifecycle: activation, claims, settlement, and void
 
     const st = await createSettlement({ claimId: createdClaim.id, userId: fx.userId });
     const [settlement] = await db.select().from(settlements).where(eq(settlements.id, st.id));
-    assert.equal(settlement.type, "partner_commission");
+    assert.equal(settlement.type, "partner_commission_settlement");
     const [settledItem] = await db.select().from(financialItems).where(eq(financialItems.id, partnerItem.id));
     assert.equal(settledItem.status, "settled");
 

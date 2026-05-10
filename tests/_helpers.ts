@@ -9,11 +9,11 @@ import {
   roles,
   users,
   settings,
-  partnerCommissions,
-  orderPayments,
-  salesCommissions,
   claims,
   claimItems,
+  settlements,
+  financialItems,
+  financialEvents,
   auditLog,
   notifications,
 } from "../server/schema.js";
@@ -141,11 +141,11 @@ export async function createIsolatedFixture(opts: {
     userId: user.id,
     cleanup: async () => {
       // Best-effort cleanup. ON DELETE CASCADE handles dependents for partner/customer.
+      await db.delete(financialEvents).where(eq(financialEvents.partnerId, partner.id));
       await db.delete(claimItems).where(sql`${claimItems.claimId} IN (SELECT id FROM claims WHERE partner_id = ${partner.id})`);
+      await db.delete(settlements).where(sql`${settlements.id} IN (SELECT settlement_id FROM claims WHERE partner_id = ${partner.id} AND settlement_id IS NOT NULL)`);
       await db.delete(claims).where(eq(claims.partnerId, partner.id));
-      await db.delete(salesCommissions).where(eq(salesCommissions.partnerId, partner.id));
-      await db.delete(partnerCommissions).where(eq(partnerCommissions.partnerId, partner.id));
-      await db.delete(orderPayments).where(eq(orderPayments.partnerId, partner.id));
+      await db.delete(financialItems).where(eq(financialItems.relatedPartnerId, partner.id));
       await db.delete(requests).where(eq(requests.partnerId, partner.id));
       await db.delete(customerOwnership).where(eq(customerOwnership.partnerId, partner.id));
       await db.delete(customers).where(eq(customers.id, cust.id));
@@ -173,6 +173,7 @@ export async function createTestRequest(fx: TestFixture, opts: { activated?: boo
       status: opts.activated ? "activated" : "new_request",
       activatedAt: opts.activated ? new Date() : null,
       createdByUserId: fx.userId,
+      salesUserId: fx.userId,
     })
     .returning();
   return r.id;

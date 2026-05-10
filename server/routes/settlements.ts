@@ -21,23 +21,27 @@ function isClaimType(v: string | undefined): v is ClaimType {
 settlementsRouter.get("/", requirePerm("settlements:view"), async (req, res) => {
   const cu = getUser(req)!;
   const { partnerId, type } = req.query as Record<string, string | undefined>;
+  // Settlements link to a partner via their (single) attached claim.
   const filters: SQL[] = [];
-  if (partnerScoped(cu)) filters.push(eq(settlements.partnerId, cu.partnerId!));
-  else if (partnerId) filters.push(eq(settlements.partnerId, Number(partnerId)));
-  if (isClaimType(type)) filters.push(eq(settlements.type, type));
+  if (partnerScoped(cu)) filters.push(eq(claims.partnerId, cu.partnerId!));
+  else if (partnerId) filters.push(eq(claims.partnerId, Number(partnerId)));
+  if (type) filters.push(eq(settlements.type, type));
   const where = filters.length ? and(...filters) : undefined;
   const q = db.select({
     id: settlements.id,
     settlementNumber: settlements.settlementNumber,
     type: settlements.type,
-    partnerId: settlements.partnerId,
+    status: settlements.status,
+    partnerId: claims.partnerId,
     partnerName: partners.name,
-    claimId: settlements.claimId,
+    claimId: claims.id,
+    claimNumber: claims.claimNumber,
     totalAmount: settlements.totalAmount,
-    direction: settlements.direction,
     completedAt: settlements.completedAt,
     createdAt: settlements.createdAt,
-  }).from(settlements).leftJoin(partners, eq(partners.id, settlements.partnerId));
+  }).from(settlements)
+    .leftJoin(claims, eq(claims.settlementId, settlements.id))
+    .leftJoin(partners, eq(partners.id, claims.partnerId));
   const rows = where
     ? await q.where(where).orderBy(desc(settlements.createdAt)).limit(200)
     : await q.orderBy(desc(settlements.createdAt)).limit(200);
@@ -74,16 +78,17 @@ settlementsRouter.get("/:id", requirePerm("settlements:view"), async (req, res) 
   const cu = getUser(req)!;
   const [s] = await db.select().from(settlements).where(eq(settlements.id, id));
   if (!s) return res.status(404).json({ error: "not_found" });
-  if (partnerScoped(cu) && s.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-  const items = await db.select({
+  const [c] = await db.select().from(claims).where(eq(claims.settlementId, s.id));
+  if (partnerScoped(cu) && (!c || c.partnerId !== cu.partnerId)) return res.status(403).json({ error: "forbidden" });
+  const items = c ? await db.select({
     id: financialItems.id,
     type: financialItems.type,
     amount: financialItems.amount,
     status: financialItems.status,
   }).from(claimItems)
     .leftJoin(financialItems, eq(financialItems.id, claimItems.financialItemId))
-    .where(eq(claimItems.claimId, s.claimId));
-  res.json({ settlement: s, items });
+    .where(eq(claimItems.claimId, c.id)) : [];
+  res.json({ settlement: s, claim: c ?? null, items });
 });
 
 const createInput = z.object({

@@ -23,7 +23,6 @@ import { settlementsRouter } from "./routes/settlements.js";
 import { reportsRouter } from "./routes/reports.js";
 import { auditLogRouter } from "./routes/audit-log.js";
 import { excelImportRouter } from "./routes/excel-import.js";
-import { lifecycleRouter } from "./routes/lifecycle.js";
 import { ensureSchema, runSeed } from "./seed.js";
 import { markExpiredOwnerships } from "./ownership.js";
 import { runFinancialHousekeep } from "./financial.js";
@@ -79,10 +78,6 @@ app.use("/api/settlements", settlementsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/audit-log", auditLogRouter);
 app.use("/api/excel-import", excelImportRouter);
-// Unified Transaction Lifecycle (master status orchestration). Mounted at
-// /api/orders to match the spec's URL conventions; operates on the same
-// `requests` rows that `/api/requests` exposes.
-app.use("/api/orders", lifecycleRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("unhandled error", err);
