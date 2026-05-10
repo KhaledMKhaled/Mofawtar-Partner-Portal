@@ -2,7 +2,7 @@ import { Router } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import {
-  orderPayments, partnerCommissions, salesCommissions, claims, requests, customers, partners, packages, customerOwnership, users,
+  financialItems, claims, requests, customers, partners, packages, customerOwnership, users,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import * as XLSX from "xlsx";
@@ -43,79 +43,79 @@ async function fetchReport(key: ReportKey, f: ReportFilters): Promise<{ headers:
   };
   switch (key) {
     case "payments_summary": {
-      const filters: SQL[] = [...dateFilter(orderPayments.createdAt as unknown as SQL.Aliased)];
-      if (partnerId) filters.push(eq(orderPayments.partnerId, partnerId));
-      if (status) filters.push(eq(orderPayments.status, status));
-      if (packageId) filters.push(eq(orderPayments.packageId, packageId));
+      const filters: SQL[] = [eq(financialItems.type, "payment_item"), ...dateFilter(financialItems.createdAt as unknown as SQL.Aliased)];
+      if (partnerId) filters.push(eq(financialItems.relatedPartnerId, partnerId));
+      if (status) filters.push(eq(financialItems.status, status));
+      if (packageId) filters.push(eq(financialItems.relatedPackageId, packageId));
       const where = filters.length ? and(...filters) : undefined;
       const q = db.select({
-        id: orderPayments.id,
+        id: financialItems.id,
         partnerName: partners.name,
         customerName: customers.name,
         packageName: packages.name,
-        gross: orderPayments.grossAmount,
-        net: orderPayments.netAmount,
-        commission: orderPayments.partnerCommissionAmount,
-        netDue: orderPayments.netDueToCompany,
-        status: orderPayments.status,
-        createdAt: orderPayments.createdAt,
-      }).from(orderPayments)
-        .leftJoin(partners, eq(partners.id, orderPayments.partnerId))
-        .leftJoin(customers, eq(customers.id, orderPayments.customerId))
-        .leftJoin(packages, eq(packages.id, orderPayments.packageId));
-      const rows = where ? await q.where(where).orderBy(desc(orderPayments.createdAt)).limit(2000) : await q.orderBy(desc(orderPayments.createdAt)).limit(2000);
+        gross: financialItems.grossCustomerAmount,
+        net: financialItems.netCompanyAmount,
+        commission: financialItems.partnerCommissionAmount,
+        netDue: financialItems.netAmountDueToCompany,
+        status: financialItems.status,
+        createdAt: financialItems.createdAt,
+      }).from(financialItems)
+        .leftJoin(partners, eq(partners.id, financialItems.relatedPartnerId))
+        .leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId))
+        .leftJoin(packages, eq(packages.id, financialItems.relatedPackageId));
+      const rows = where ? await q.where(where).orderBy(desc(financialItems.createdAt)).limit(2000) : await q.orderBy(desc(financialItems.createdAt)).limit(2000);
       return { headers: ["id","partner","customer","package","gross","net","commission","netDue","status","createdAt"], rows: rows.map((r) => ({
         id: r.id, partner: r.partnerName, customer: r.customerName, package: r.packageName,
         gross: r.gross, net: r.net, commission: r.commission, netDue: r.netDue, status: r.status, createdAt: r.createdAt,
       })) };
     }
     case "partner_commissions_summary": {
-      const filters: SQL[] = [...dateFilter(partnerCommissions.createdAt as unknown as SQL.Aliased)];
-      if (partnerId) filters.push(eq(partnerCommissions.partnerId, partnerId));
-      if (status) filters.push(eq(partnerCommissions.status, status));
-      if (packageId) filters.push(eq(partnerCommissions.packageId, packageId));
+      const filters: SQL[] = [eq(financialItems.type, "partner_commission_item"), ...dateFilter(financialItems.createdAt as unknown as SQL.Aliased)];
+      if (partnerId) filters.push(eq(financialItems.relatedPartnerId, partnerId));
+      if (status) filters.push(eq(financialItems.status, status));
+      if (packageId) filters.push(eq(financialItems.relatedPackageId, packageId));
       const where = filters.length ? and(...filters) : undefined;
       const q = db.select({
-        id: partnerCommissions.id,
+        id: financialItems.id,
         partnerName: partners.name,
         customerName: customers.name,
         packageName: packages.name,
-        baseAmount: partnerCommissions.baseAmount,
-        pct: partnerCommissions.pct,
-        amount: partnerCommissions.amount,
-        status: partnerCommissions.status,
-        createdAt: partnerCommissions.createdAt,
-      }).from(partnerCommissions)
-        .leftJoin(partners, eq(partners.id, partnerCommissions.partnerId))
-        .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-        .leftJoin(packages, eq(packages.id, partnerCommissions.packageId));
-      const raw = where ? await q.where(where).orderBy(desc(partnerCommissions.createdAt)).limit(2000) : await q.orderBy(desc(partnerCommissions.createdAt)).limit(2000);
+        baseAmount: financialItems.baseAmount,
+        pct: financialItems.commissionPct,
+        amount: financialItems.amount,
+        status: financialItems.status,
+        createdAt: financialItems.createdAt,
+      }).from(financialItems)
+        .leftJoin(partners, eq(partners.id, financialItems.relatedPartnerId))
+        .leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId))
+        .leftJoin(packages, eq(packages.id, financialItems.relatedPackageId));
+      const raw = where ? await q.where(where).orderBy(desc(financialItems.createdAt)).limit(2000) : await q.orderBy(desc(financialItems.createdAt)).limit(2000);
       const rows = raw.map((r) => ({ id: r.id, partner: r.partnerName, customer: r.customerName, package: r.packageName, baseAmount: r.baseAmount, pct: r.pct, amount: r.amount, status: r.status, createdAt: r.createdAt }));
       return { headers: ["id","partner","customer","package","baseAmount","pct","amount","status","createdAt"], rows };
     }
     case "sales_commissions_summary": {
-      const filters: SQL[] = [...dateFilter(salesCommissions.createdAt as unknown as SQL.Aliased)];
-      if (partnerId) filters.push(eq(salesCommissions.partnerId, partnerId));
-      if (status) filters.push(eq(salesCommissions.status, status));
-      if (salesUserId) filters.push(eq(salesCommissions.salesUserId, salesUserId));
-      if (packageId) filters.push(eq(salesCommissions.packageId, packageId));
+      const filters: SQL[] = [eq(financialItems.type, "sales_commission_item"), ...dateFilter(financialItems.createdAt as unknown as SQL.Aliased)];
+      if (partnerId) filters.push(eq(financialItems.relatedPartnerId, partnerId));
+      if (status) filters.push(eq(financialItems.status, status));
+      if (salesUserId) filters.push(eq(financialItems.relatedSalesUserId, salesUserId));
+      if (packageId) filters.push(eq(financialItems.relatedPackageId, packageId));
       const where = filters.length ? and(...filters) : undefined;
       const q = db.select({
-        id: salesCommissions.id,
+        id: financialItems.id,
         partnerName: partners.name,
         salesName: users.name,
         customerName: customers.name,
         packageName: packages.name,
-        amount: salesCommissions.amount,
-        pct: salesCommissions.pct,
-        status: salesCommissions.status,
-        createdAt: salesCommissions.createdAt,
-      }).from(salesCommissions)
-        .leftJoin(partners, eq(partners.id, salesCommissions.partnerId))
-        .leftJoin(users, eq(users.id, salesCommissions.salesUserId))
-        .leftJoin(customers, eq(customers.id, salesCommissions.customerId))
-        .leftJoin(packages, eq(packages.id, salesCommissions.packageId));
-      const raw = where ? await q.where(where).orderBy(desc(salesCommissions.createdAt)).limit(2000) : await q.orderBy(desc(salesCommissions.createdAt)).limit(2000);
+        amount: financialItems.amount,
+        pct: financialItems.commissionPct,
+        status: financialItems.status,
+        createdAt: financialItems.createdAt,
+      }).from(financialItems)
+        .leftJoin(partners, eq(partners.id, financialItems.relatedPartnerId))
+        .leftJoin(users, eq(users.id, financialItems.relatedSalesUserId))
+        .leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId))
+        .leftJoin(packages, eq(packages.id, financialItems.relatedPackageId));
+      const raw = where ? await q.where(where).orderBy(desc(financialItems.createdAt)).limit(2000) : await q.orderBy(desc(financialItems.createdAt)).limit(2000);
       const rows = raw.map((r) => ({ id: r.id, partner: r.partnerName, sales: r.salesName, customer: r.customerName, package: r.packageName, pct: r.pct, amount: r.amount, status: r.status, createdAt: r.createdAt }));
       return { headers: ["id","partner","sales","customer","package","pct","amount","status","createdAt"], rows };
     }
