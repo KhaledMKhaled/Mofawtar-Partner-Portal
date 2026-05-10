@@ -183,7 +183,12 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       const toStatus = String(r.status ?? r.toStatus ?? "").trim() as OrderPaymentStatus;
       if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
       if (!ORDER_PAYMENT_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
-      const result = await transitionOrderPayment({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      const claimGated = ["received_by_company", "settled"];
+      const isOverride = claimGated.includes(toStatus);
+      if (isOverride && !cu.permissions?.includes("payments:manual_override")) {
+        failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
+      }
+      const result = await transitionOrderPayment({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
       if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
     }
   } else if (parsed.data.entity === "partner_commissions") {
@@ -193,7 +198,12 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       const toStatus = String(r.status ?? r.toStatus ?? "").trim() as PartnerCommissionStatus;
       if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
       if (!PARTNER_COMMISSION_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
-      const result = await transitionPartnerCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      const gated = ["in_claim", "claim_approved", "ready_for_settlement", "settled_successfully"];
+      const isOverride = gated.includes(toStatus);
+      if (isOverride && !cu.permissions?.includes("partner_commissions:manual_override")) {
+        failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
+      }
+      const result = await transitionPartnerCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
       if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
     }
   } else if (parsed.data.entity === "sales_commissions") {
@@ -203,7 +213,12 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       const toStatus = String(r.status ?? r.toStatus ?? "").trim() as SalesCommissionStatus;
       if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
       if (!SALES_COMMISSION_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
-      const result = await transitionSalesCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update" });
+      const gated = ["in_payout_batch", "approved_by_company", "paid"];
+      const isOverride = gated.includes(toStatus);
+      if (isOverride && !cu.permissions?.includes("sales_commissions:manual_override")) {
+        failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
+      }
+      const result = await transitionSalesCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
       if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
     }
   }

@@ -129,6 +129,8 @@ payoutBatchesRouter.post("/promote-eligible", requirePerm("sales_commissions:cha
   let n = 0;
   for (const it of items) {
     const r = await transitionSalesCommission({ id: it.id, toStatus: "eligible_for_payout", userId: cu.id, reason: "bulk_promote" });
+    // Note: `eligible_for_payout` is the natural promotion target after the
+    // safety period; it is NOT batch-gated, so no override flag is needed.
     if (r.ok) n++;
   }
   res.json({ promoted: n });

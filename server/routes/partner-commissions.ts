@@ -90,8 +90,24 @@ partnerCommissionsRouter.post("/:id/transition", requirePerm("partner_commission
   const [pc] = await db.select().from(partnerCommissions).where(eq(partnerCommissions.id, id));
   if (!pc) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && pc.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
+
+  // CLAIM/SETTLEMENT-GATED transitions cannot be hit directly. The normal
+  // forward path is: createClaim → approveClaim → createSettlement, each of
+  // which advances the partner_commission status atomically. Direct calls
+  // are treated as a manual override and require the dedicated permission.
+  const gated = ["in_claim", "claim_approved", "ready_for_settlement", "settled_successfully"];
+  const toStatus = parsed.data.toStatus as PartnerCommissionStatus;
+  const isOverride = gated.includes(toStatus);
+  if (isOverride && !cu.permissions?.includes("partner_commissions:manual_override")) {
+    return res.status(403).json({
+      error: "forbidden",
+      detail: "manual_override_required",
+      hint: "هذا الانتقال يحدث تلقائياً عبر مسار المطالبة/التسوية. للاستثناء استخدم صلاحية التجاوز اليدوي.",
+    });
+  }
   const result = await transitionPartnerCommission({
-    id, toStatus: parsed.data.toStatus as PartnerCommissionStatus, userId: cu.id, reason: parsed.data.reason,
+    id, toStatus, userId: cu.id, reason: parsed.data.reason,
+    viaManualOverride: isOverride,
   });
   if (!result.ok) return res.status(409).json(result);
   res.json({ ok: true });

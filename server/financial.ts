@@ -393,6 +393,15 @@ export async function transitionOrderPayment(
 export async function transitionPartnerCommission(
   opts: {
     id: number; toStatus: PartnerCommissionStatus; userId: number | null; reason?: string | null;
+    // Gates for the claim → settlement pipeline. The forward path
+    // `eligible_for_claim → in_claim → claim_approved → ready_for_settlement →
+    // settled_successfully` is reachable ONLY through the bound primitives
+    // (createClaim, approveClaim, createSettlement). Any direct call must
+    // come with `viaManualOverride: true` and the caller must hold the
+    // `partner_commissions:manual_override` permission (enforced at the route).
+    viaClaim?: boolean;          // set by createClaim / approveClaim
+    viaSettlement?: boolean;     // set by createSettlement
+    viaManualOverride?: boolean; // set by route when override perm present
   },
   executor: DbExecutor = db,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -400,6 +409,15 @@ export async function transitionPartnerCommission(
   if (!pc) return { ok: false, error: "not_found" };
   const from = pc.status as PartnerCommissionStatus;
   if (!isAllowedPartnerCommissionTransition(from, opts.toStatus)) return { ok: false, error: "invalid_transition" };
+  // CLAIM/SETTLEMENT GATE
+  const claimGated: PartnerCommissionStatus[] = ["in_claim", "claim_approved"];
+  const settlementGated: PartnerCommissionStatus[] = ["ready_for_settlement", "settled_successfully"];
+  if (claimGated.includes(opts.toStatus) && !opts.viaClaim && !opts.viaManualOverride) {
+    return { ok: false, error: "requires_claim_or_override" };
+  }
+  if (settlementGated.includes(opts.toStatus) && !opts.viaSettlement && !opts.viaManualOverride) {
+    return { ok: false, error: "requires_settlement_or_override" };
+  }
   await executor.update(partnerCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(partnerCommissions.id, opts.id));
   await executor.insert(partnerCommissionStatusHistory).values({
     partnerCommissionId: opts.id, fromStatus: from, toStatus: opts.toStatus, reason: opts.reason ?? null, changedByUserId: opts.userId,
@@ -423,6 +441,13 @@ export async function transitionPartnerCommission(
 export async function transitionSalesCommission(
   opts: {
     id: number; toStatus: SalesCommissionStatus; userId: number; reason?: string | null;
+    // Gates for the payout-batch pipeline. The forward path
+    // `eligible_for_payout → in_payout_batch → approved_by_company → paid`
+    // is reachable ONLY through the payout-batch primitives. Direct calls
+    // must come with `viaManualOverride: true` and the caller must hold
+    // `sales_commissions:manual_override` (enforced at the route).
+    viaPayoutBatch?: boolean;
+    viaManualOverride?: boolean;
   },
   executor: DbExecutor = db,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -430,6 +455,11 @@ export async function transitionSalesCommission(
   if (!sc) return { ok: false, error: "not_found" };
   const from = sc.status as SalesCommissionStatus;
   if (!isAllowedSalesCommissionTransition(from, opts.toStatus)) return { ok: false, error: "invalid_transition" };
+  // PAYOUT-BATCH GATE
+  const batchGated: SalesCommissionStatus[] = ["in_payout_batch", "approved_by_company", "paid"];
+  if (batchGated.includes(opts.toStatus) && !opts.viaPayoutBatch && !opts.viaManualOverride) {
+    return { ok: false, error: "requires_payout_batch_or_override" };
+  }
   await executor.update(salesCommissions).set({ status: opts.toStatus, updatedAt: new Date() }).where(eq(salesCommissions.id, opts.id));
   await executor.insert(salesCommissionStatusHistory).values({
     salesCommissionId: opts.id, fromStatus: from, toStatus: opts.toStatus, reason: opts.reason ?? null, changedByUserId: opts.userId,
@@ -564,7 +594,7 @@ export async function createClaim(opts: {
     for (const it of items) {
       await tx.insert(claimItems).values({ claimId: claim.id, partnerCommissionId: it.id, amount: it.amount });
       const r = await transitionPartnerCommission(
-        { id: it.id, toStatus: "in_claim", userId: opts.userId, reason: `attached to ${claimNumber}` },
+        { id: it.id, toStatus: "in_claim", userId: opts.userId, reason: `attached to ${claimNumber}`, viaClaim: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:${it.id}:${r.error}`);
@@ -600,7 +630,7 @@ export async function approveClaim(claimId: number, userId: number): Promise<voi
     const items = await tx.select().from(claimItems).where(eq(claimItems.claimId, claimId));
     for (const it of items) {
       const r = await transitionPartnerCommission(
-        { id: it.partnerCommissionId, toStatus: "claim_approved", userId, reason: "claim_approved" },
+        { id: it.partnerCommissionId, toStatus: "claim_approved", userId, reason: "claim_approved", viaClaim: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:${it.partnerCommissionId}:${r.error}`);
@@ -682,7 +712,7 @@ export async function createPayoutBatch(opts: {
     for (const it of items) {
       await tx.insert(payoutBatchItems).values({ payoutBatchId: batch.id, salesCommissionId: it.id, amount: it.amount });
       const r = await transitionSalesCommission(
-        { id: it.id, toStatus: "in_payout_batch", userId: opts.userId, reason: `attached to ${batchNumber}` },
+        { id: it.id, toStatus: "in_payout_batch", userId: opts.userId, reason: `attached to ${batchNumber}`, viaPayoutBatch: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:${it.id}:${r.error}`);
@@ -703,7 +733,7 @@ export async function approvePayoutBatch(batchId: number, userId: number): Promi
     const items = await tx.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
     for (const it of items) {
       const r = await transitionSalesCommission(
-        { id: it.salesCommissionId, toStatus: "approved_by_company", userId, reason: "batch_approved" },
+        { id: it.salesCommissionId, toStatus: "approved_by_company", userId, reason: "batch_approved", viaPayoutBatch: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:${it.salesCommissionId}:${r.error}`);
@@ -722,7 +752,7 @@ export async function payPayoutBatch(batchId: number, userId: number): Promise<v
     const items = await tx.select().from(payoutBatchItems).where(eq(payoutBatchItems.payoutBatchId, batchId));
     for (const it of items) {
       const r = await transitionSalesCommission(
-        { id: it.salesCommissionId, toStatus: "paid", userId, reason: "batch_paid" },
+        { id: it.salesCommissionId, toStatus: "paid", userId, reason: "batch_paid", viaPayoutBatch: true },
         tx,
       );
       if (!r.ok) throw new Error(`transition_failed:${it.salesCommissionId}:${r.error}`);
@@ -829,12 +859,12 @@ export async function createSettlement(opts: {
         );
     for (const it of itemsToSettle) {
       const r1 = await transitionPartnerCommission(
-        { id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber },
+        { id: it.partnerCommissionId, toStatus: "ready_for_settlement", userId: opts.userId, reason: settlementNumber, viaSettlement: true },
         tx,
       );
       if (!r1.ok) throw new Error(`transition_failed:partner_commission:${it.partnerCommissionId}:${r1.error}`);
       const r2 = await transitionPartnerCommission(
-        { id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber },
+        { id: it.partnerCommissionId, toStatus: "settled_successfully", userId: opts.userId, reason: settlementNumber, viaSettlement: true },
         tx,
       );
       if (!r2.ok) throw new Error(`transition_failed:partner_commission:${it.partnerCommissionId}:${r2.error}`);

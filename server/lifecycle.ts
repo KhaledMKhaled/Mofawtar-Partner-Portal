@@ -471,7 +471,7 @@ async function applyStageProjection(
         amount: pc.amount,
       });
       const r2 = await transitionPartnerCommission(
-        { id: pc.id, toStatus: "in_claim", userId, reason: claimNumber },
+        { id: pc.id, toStatus: "in_claim", userId, reason: claimNumber, viaClaim: true },
         tx,
       );
       if (!r2.ok) throw new Error(`pc_transition_failed:${r2.error}`);
@@ -502,12 +502,12 @@ async function applyStageProjection(
           .where(eq(claims.id, c.id));
       }
       const r1 = await transitionPartnerCommission(
-        { id: pc.id, toStatus: "claim_approved", userId, reason: c.claimNumber },
+        { id: pc.id, toStatus: "claim_approved", userId, reason: c.claimNumber, viaClaim: true },
         tx,
       );
       if (!r1.ok) throw new Error(`pc_transition_failed:${r1.error}`);
       const r2 = await transitionPartnerCommission(
-        { id: pc.id, toStatus: "ready_for_settlement", userId, reason: c.claimNumber },
+        { id: pc.id, toStatus: "ready_for_settlement", userId, reason: c.claimNumber, viaSettlement: true },
         tx,
       );
       if (!r2.ok) throw new Error(`pc_transition_failed:${r2.error}`);
@@ -595,7 +595,7 @@ async function applyStageProjection(
         .returning();
 
       const r1 = await transitionOrderPayment(
-        { id: op.id, toStatus: "settled", userId, reason: settlementNumber },
+        { id: op.id, toStatus: "settled", userId, reason: settlementNumber, viaSettlement: true },
         tx,
       );
       if (!r1.ok) throw new Error(`op_settle_failed:${r1.error}`);
@@ -605,7 +605,7 @@ async function applyStageProjection(
         .where(eq(orderPayments.id, op.id));
 
       const r2 = await transitionPartnerCommission(
-        { id: pc.id, toStatus: "settled_successfully", userId, reason: settlementNumber },
+        { id: pc.id, toStatus: "settled_successfully", userId, reason: settlementNumber, viaSettlement: true },
         tx,
       );
       if (!r2.ok) throw new Error(`pc_settle_failed:${r2.error}`);

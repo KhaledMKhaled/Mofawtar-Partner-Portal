@@ -113,8 +113,24 @@ salesCommissionsRouter.post("/:id/transition", requirePerm("sales_commissions:ch
   const [sc] = await db.select().from(salesCommissions).where(eq(salesCommissions.id, id));
   if (!sc) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && sc.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
+
+  // PAYOUT-BATCH-GATED transitions cannot be hit directly. The normal path
+  // is: createPayoutBatch → approvePayoutBatch → payPayoutBatch, each of
+  // which advances the sales_commission status atomically. Direct calls
+  // are treated as a manual override and require the dedicated permission.
+  const gated = ["in_payout_batch", "approved_by_company", "paid"];
+  const toStatus = parsed.data.toStatus as SalesCommissionStatus;
+  const isOverride = gated.includes(toStatus);
+  if (isOverride && !cu.permissions?.includes("sales_commissions:manual_override")) {
+    return res.status(403).json({
+      error: "forbidden",
+      detail: "manual_override_required",
+      hint: "هذا الانتقال يحدث تلقائياً عبر دفعة الصرف (Payout Batch). للاستثناء استخدم صلاحية التجاوز اليدوي.",
+    });
+  }
   const result = await transitionSalesCommission({
-    id, toStatus: parsed.data.toStatus as SalesCommissionStatus, userId: cu.id, reason: parsed.data.reason,
+    id, toStatus, userId: cu.id, reason: parsed.data.reason,
+    viaManualOverride: isOverride,
   });
   if (!result.ok) return res.status(409).json(result);
   res.json({ ok: true });
