@@ -49,10 +49,11 @@ export async function resolveCommissionRates(
   partnerId: number,
   packageId: number,
   operationType: string,
+  executor: DbExecutor = db,
 ): Promise<{ partnerPct: number; salesPct: number }> {
-  const [partner] = await db.select().from(partners).where(eq(partners.id, partnerId));
-  const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId));
-  const [rule] = await db
+  const [partner] = await executor.select().from(partners).where(eq(partners.id, partnerId));
+  const [pkg] = await executor.select().from(packages).where(eq(packages.id, packageId));
+  const [rule] = await executor
     .select()
     .from(commissionRules)
     .where(
@@ -121,11 +122,15 @@ export async function onRequestActivated(
   const tax = afterTax - beforeTax;
   const baseAmount = commissionBase(beforeTax, afterTax, base);
 
-  const eligible = await isEligibleForCommission(r.customerId, r.partnerId);
+  // CRITICAL: pass the executor so the just-inserted ownership row
+  // (created earlier in the same transaction by the caller via
+  // startOwnership) is visible to the eligibility check. Reading via
+  // the global `db` would miss it and silently zero out the commission.
+  const eligible = await isEligibleForCommission(r.customerId, r.partnerId, new Date(), executor);
   let partnerPct = 0;
   let salesPct = 0;
   if (eligible) {
-    const rates = await resolveCommissionRates(r.partnerId, r.packageId, r.operationType ?? "");
+    const rates = await resolveCommissionRates(r.partnerId, r.packageId, r.operationType ?? "", executor);
     partnerPct = rates.partnerPct;
     salesPct = rates.salesPct;
   }

@@ -23,8 +23,14 @@ export function addOwnershipPeriod(start: Date, partner: Pick<Partner, "ownershi
 
 // Find the ownership row covering `customerId` at `at` (defaults to now).
 // Returns the most recently created matching row in case of overlaps.
-export async function getOwnerAt(customerId: number, at: Date = new Date()) {
-  const rows = await db
+// Accepts an executor so callers running inside a transaction can see
+// rows that were just inserted within the same tx.
+export async function getOwnerAt(
+  customerId: number,
+  at: Date = new Date(),
+  executor: DbExecutor = db,
+) {
+  const rows = await executor
     .select()
     .from(customerOwnership)
     .where(
@@ -41,8 +47,9 @@ export async function isEligibleForCommission(
   customerId: number,
   partnerId: number,
   at: Date = new Date(),
+  executor: DbExecutor = db,
 ): Promise<boolean> {
-  const owner = await getOwnerAt(customerId, at);
+  const owner = await getOwnerAt(customerId, at, executor);
   if (!owner) return false;
   if (owner.partnerId !== partnerId) return false;
   if (owner.status === "transferred" || owner.status === "returned_to_company") return false;
