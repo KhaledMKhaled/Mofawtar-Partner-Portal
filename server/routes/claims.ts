@@ -3,7 +3,7 @@ import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
-  claims, claimItems, partnerCommissions, salesCommissions, orderPayments,
+  claims, claimItems, financialItems,
   partners, customers, packages, users, requests,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
@@ -61,61 +61,26 @@ claimsRouter.get("/eligible", requirePerm("claims:view"), async (req, res) => {
   const cu = getUser(req)!;
   const partnerId = partnerScoped(cu) ? cu.partnerId! : Number(req.query.partnerId);
   if (!partnerId) return res.status(400).json({ error: "partner_required" });
-  const type = (req.query.type as string | undefined) ?? "partner_commission";
+  const type = (req.query.type as string | undefined) ?? "partner_commission_claim";
   if (!isClaimType(type)) return res.status(400).json({ error: "invalid_type" });
 
-  if (type === "partner_commission") {
-    const rows = await db
-      .select({
-        id: partnerCommissions.id,
-        customerName: customers.name,
-        packageName: packages.name,
-        amount: partnerCommissions.amount,
-        pct: partnerCommissions.pct,
-        baseAmount: partnerCommissions.baseAmount,
-        createdAt: partnerCommissions.createdAt,
-      })
-      .from(partnerCommissions)
-      .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-      .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
-      .where(and(eq(partnerCommissions.partnerId, partnerId), eq(partnerCommissions.status, "eligible_for_claim")))
-      .orderBy(desc(partnerCommissions.createdAt));
-    return res.json(rows);
-  }
-  if (type === "payment") {
-    const rows = await db
-      .select({
-        id: orderPayments.id,
-        customerName: customers.name,
-        packageName: packages.name,
-        amount: orderPayments.netDueToCompany,
-        grossAmount: orderPayments.grossAmount,
-        createdAt: orderPayments.createdAt,
-      })
-      .from(orderPayments)
-      .leftJoin(customers, eq(customers.id, orderPayments.customerId))
-      .leftJoin(packages, eq(packages.id, orderPayments.packageId))
-      .where(and(eq(orderPayments.partnerId, partnerId), eq(orderPayments.status, "net_amount_due_to_company")))
-      .orderBy(desc(orderPayments.createdAt));
-    return res.json(rows);
-  }
-  // sales_commission
+  const financialType = type === "partner_commission_claim" ? "partner_commission_item" : type === "payment_claim" ? "payment_item" : "sales_commission_item";
   const rows = await db
     .select({
-      id: salesCommissions.id,
-      salesName: users.name,
+      id: financialItems.id,
       customerName: customers.name,
       packageName: packages.name,
-      amount: salesCommissions.amount,
-      createdAt: salesCommissions.createdAt,
+      salesName: users.name,
+      amount: financialItems.amount,
+      createdAt: financialItems.createdAt,
     })
-    .from(salesCommissions)
-    .leftJoin(users, eq(users.id, salesCommissions.salesUserId))
-    .leftJoin(customers, eq(customers.id, salesCommissions.customerId))
-    .leftJoin(packages, eq(packages.id, salesCommissions.packageId))
-    .where(and(eq(salesCommissions.partnerId, partnerId), eq(salesCommissions.status, "eligible_for_payout")))
-    .orderBy(desc(salesCommissions.createdAt));
-  res.json(rows);
+    .from(financialItems)
+    .leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId))
+    .leftJoin(packages, eq(packages.id, financialItems.relatedPackageId))
+    .leftJoin(users, eq(users.id, financialItems.relatedSalesUserId))
+    .where(and(eq(financialItems.relatedPartnerId, partnerId), eq(financialItems.type, financialType), eq(financialItems.status, "not_added_to_claim"), eq(financialItems.isClaimable, true)))
+    .orderBy(desc(financialItems.createdAt));
+  return res.json(rows);
 });
 
 claimsRouter.get("/:id", requirePerm("claims:view"), async (req, res) => {
@@ -124,53 +89,22 @@ claimsRouter.get("/:id", requirePerm("claims:view"), async (req, res) => {
   const [c] = await db.select().from(claims).where(eq(claims.id, id));
   if (!c) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && c.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-  // Items are polymorphic — join the appropriate subject table by type.
-  let items: Array<{ id: number; childId: number | null; amount: string; customerName: string | null; packageName: string | null; salesName?: string | null }> = [];
-  if (c.type === "partner_commission") {
-    items = await db
-      .select({
-        id: claimItems.id,
-        childId: claimItems.partnerCommissionId,
-        amount: claimItems.amount,
-        customerName: customers.name,
-        packageName: packages.name,
-      })
-      .from(claimItems)
-      .leftJoin(partnerCommissions, eq(partnerCommissions.id, claimItems.partnerCommissionId))
-      .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-      .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
-      .where(eq(claimItems.claimId, id));
-  } else if (c.type === "payment") {
-    items = await db
-      .select({
-        id: claimItems.id,
-        childId: claimItems.orderPaymentId,
-        amount: claimItems.amount,
-        customerName: customers.name,
-        packageName: packages.name,
-      })
-      .from(claimItems)
-      .leftJoin(orderPayments, eq(orderPayments.id, claimItems.orderPaymentId))
-      .leftJoin(customers, eq(customers.id, orderPayments.customerId))
-      .leftJoin(packages, eq(packages.id, orderPayments.packageId))
-      .where(eq(claimItems.claimId, id));
-  } else if (c.type === "sales_commission") {
-    items = await db
-      .select({
-        id: claimItems.id,
-        childId: claimItems.salesCommissionId,
-        amount: claimItems.amount,
-        customerName: customers.name,
-        packageName: packages.name,
-        salesName: users.name,
-      })
-      .from(claimItems)
-      .leftJoin(salesCommissions, eq(salesCommissions.id, claimItems.salesCommissionId))
-      .leftJoin(users, eq(users.id, salesCommissions.salesUserId))
-      .leftJoin(customers, eq(customers.id, salesCommissions.customerId))
-      .leftJoin(packages, eq(packages.id, salesCommissions.packageId))
-      .where(eq(claimItems.claimId, id));
-  }
+  const items = await db
+    .select({
+      id: claimItems.id,
+      childId: claimItems.financialItemId,
+      amount: claimItems.amountSnapshot,
+      customerName: customers.name,
+      packageName: packages.name,
+      salesName: users.name,
+      financialType: financialItems.type,
+    })
+    .from(claimItems)
+    .leftJoin(financialItems, eq(financialItems.id, claimItems.financialItemId))
+    .leftJoin(customers, eq(customers.id, financialItems.relatedCustomerId))
+    .leftJoin(packages, eq(packages.id, financialItems.relatedPackageId))
+    .leftJoin(users, eq(users.id, financialItems.relatedSalesUserId))
+    .where(eq(claimItems.claimId, id));
   const [approver] = c.approvedByUserId
     ? await db.select({ name: users.name }).from(users).where(eq(users.id, c.approvedByUserId))
     : [{ name: null }];

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import { db } from "../db.js";
-import { customers, packages, requests, orderPayments, partnerCommissions, salesCommissions } from "../schema.js";
+import { customers, packages, requests, financialItems } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { audit } from "../audit.js";
 import { ALLOWED_TRANSITIONS, REQUEST_STATUSES } from "../../shared/requests.js";
@@ -11,18 +11,17 @@ import {
   ORDER_PAYMENT_STATUSES, PARTNER_COMMISSION_STATUSES, SALES_COMMISSION_STATUSES,
   type OrderPaymentStatus, type PartnerCommissionStatus, type SalesCommissionStatus,
 } from "../../shared/financial.js";
-import { transitionOrderPayment, transitionPartnerCommission, transitionSalesCommission } from "../financial.js";
 
 export const excelImportRouter = Router();
 
-const ENTITIES = ["customers", "packages", "requests", "order_payments", "partner_commissions", "sales_commissions"] as const;
+const ENTITIES = ["customers", "packages", "requests", "payments", "partner_commissions", "sales_commissions"] as const;
 type Entity = (typeof ENTITIES)[number];
 
 const TEMPLATE_HEADERS: Record<Entity, string[]> = {
   customers: ["taxCardNumber", "name", "contactPerson", "contactPhone", "email", "address", "taxOffice", "businessActivity"],
   packages: ["id", "name", "itemPriceBeforeTax", "taxPct", "finalPriceAfterTax", "durationDays", "active"],
   requests: ["id", "status"],
-  order_payments: ["id", "status"],
+  payments: ["id", "status"],
   partner_commissions: ["id", "status"],
   sales_commissions: ["id", "status"],
 };
@@ -81,14 +80,14 @@ async function validateRows(entity: Entity, rows: Array<Record<string, unknown>>
         const [existing] = await db.select().from(packages).where(eq(packages.id, id));
         if (!existing) err = "not_found";
       }
-    } else if (entity === "requests" || entity === "order_payments" || entity === "partner_commissions" || entity === "sales_commissions") {
+    } else if (entity === "requests" || entity === "payments" || entity === "partner_commissions" || entity === "sales_commissions") {
       const id = Number(r.id);
       const toStatus = String(r.status ?? r.toStatus ?? "").trim();
       if (!id || !toStatus) err = "missing_id_or_status";
       else {
         const allowedStatuses: readonly string[] =
           entity === "requests" ? REQUEST_STATUSES :
-          entity === "order_payments" ? ORDER_PAYMENT_STATUSES :
+          entity === "payments" ? ORDER_PAYMENT_STATUSES :
           entity === "partner_commissions" ? PARTNER_COMMISSION_STATUSES :
           SALES_COMMISSION_STATUSES;
         if (!allowedStatuses.includes(toStatus)) err = "invalid_status";
@@ -176,7 +175,7 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       }
       updated++;
     }
-  } else if (parsed.data.entity === "order_payments") {
+  } else if (parsed.data.entity === "payments") {
     for (let i = 0; i < parsed.data.rows.length; i++) {
       const r = parsed.data.rows[i] as Record<string, unknown>;
       const id = Number(r.id);
@@ -188,8 +187,7 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       if (isOverride && !cu.permissions?.includes("payments:manual_override")) {
         failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
       }
-      const result = await transitionOrderPayment({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
-      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
+      await db.update(financialItems).set({ status: toStatus, updatedAt: new Date() }).where(and(eq(financialItems.id, id), eq(financialItems.type, "payment_item"))); updated++;
     }
   } else if (parsed.data.entity === "partner_commissions") {
     for (let i = 0; i < parsed.data.rows.length; i++) {
@@ -203,8 +201,7 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       if (isOverride && !cu.permissions?.includes("partner_commissions:manual_override")) {
         failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
       }
-      const result = await transitionPartnerCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
-      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
+      await db.update(financialItems).set({ status: toStatus, updatedAt: new Date() }).where(and(eq(financialItems.id, id), eq(financialItems.type, "partner_commission_item"))); updated++;
     }
   } else if (parsed.data.entity === "sales_commissions") {
     for (let i = 0; i < parsed.data.rows.length; i++) {
@@ -213,13 +210,12 @@ excelImportRouter.post("/", requirePerm("excel_import:import"), async (req, res)
       const toStatus = String(r.status ?? r.toStatus ?? "").trim() as SalesCommissionStatus;
       if (!id || !toStatus) { failed++; failures.push({ row: i + 2, error: "missing_id_or_status" }); continue; }
       if (!SALES_COMMISSION_STATUSES.includes(toStatus)) { failed++; failures.push({ row: i + 2, error: "invalid_status" }); continue; }
-      const gated = ["in_payout_batch", "approved_by_company", "paid"];
+      const gated = ["added_to_claim", "approved", "settled"];
       const isOverride = gated.includes(toStatus);
       if (isOverride && !cu.permissions?.includes("sales_commissions:manual_override")) {
         failed++; failures.push({ row: i + 2, error: "manual_override_required" }); continue;
       }
-      const result = await transitionSalesCommission({ id, toStatus, userId: cu.id, reason: "excel_bulk_update", viaManualOverride: isOverride });
-      if (result.ok) updated++; else { failed++; failures.push({ row: i + 2, error: result.error ?? "transition_failed" }); }
+      await db.update(financialItems).set({ status: toStatus, updatedAt: new Date() }).where(and(eq(financialItems.id, id), eq(financialItems.type, "sales_commission_item"))); updated++;
     }
   }
 
