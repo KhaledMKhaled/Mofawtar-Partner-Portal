@@ -175,10 +175,17 @@ export function RequestWizard({
   });
 
   // Reset sales selection when company user changes the partner.
+  // Skip the first run so we don't wipe values just hydrated from initialDraft.
+  const partnerChangeFirstRun = useRef(true);
   useEffect(() => {
+    if (partnerChangeFirstRun.current) { partnerChangeFirstRun.current = false; return; }
     if (isCompany) { setSalesUserId(null); setSalesUserName(null); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardPartnerId]);
+  // Re-arm the guard whenever the modal re-opens.
+  useEffect(() => {
+    if (open) partnerChangeFirstRun.current = true;
+  }, [open]);
 
   const lookupMut = useMutation({
     mutationFn: (taxCard: string) =>
