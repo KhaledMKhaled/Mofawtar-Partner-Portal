@@ -1,143 +1,44 @@
-// Phase 3 — financial state machines, transitions, and shared types.
+// Unified greenfield financial constants
+export const FINANCIAL_ITEM_TYPES = ["payment_item", "partner_commission_item", "sales_commission_item"] as const;
+export type FinancialItemType = (typeof FINANCIAL_ITEM_TYPES)[number];
 
-// --- ORDER PAYMENT FLOW (mirrors PC and SC: ready → in_claim → claim_approved → settled) ---
-// `in_payment_claim` and `payment_claim_approved` are the new claim-gated
-// stages added to align with the unified 3-claim / 3-settlement model.
-// `received_by_company` is preserved as a legacy alias (maps to
-// `payment_claim_approved` semantically); kept so historical data and any
-// remaining routes continue to function during the transition.
-export const ORDER_PAYMENT_STATUSES = [
-  "pending_collection_confirmation",
-  "collected_by_sales",
-  "held_by_partner",
-  "net_amount_due_to_company",
-  "in_payment_claim",
-  "payment_claim_approved",
-  "received_by_company",
+export const FINANCIAL_ITEM_STATUSES = [
+  "not_added_to_claim",
+  "added_to_claim",
+  "added_to_settlement",
   "settled",
-  "refunded",
-  "cancelled",
 ] as const;
-export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
+export type FinancialItemStatus = (typeof FINANCIAL_ITEM_STATUSES)[number];
 
-export const ORDER_PAYMENT_TRANSITIONS: Record<OrderPaymentStatus, OrderPaymentStatus[]> = {
-  pending_collection_confirmation: ["collected_by_sales", "refunded", "cancelled"],
-  collected_by_sales: ["held_by_partner", "refunded", "cancelled"],
-  held_by_partner: ["net_amount_due_to_company", "refunded", "cancelled"],
-  net_amount_due_to_company: ["in_payment_claim", "received_by_company", "refunded", "cancelled"],
-  in_payment_claim: ["payment_claim_approved", "net_amount_due_to_company", "refunded", "cancelled"],
-  payment_claim_approved: ["settled", "received_by_company", "refunded", "cancelled"],
-  received_by_company: ["settled", "refunded", "cancelled"],
-  settled: [],
-  refunded: [],
-  cancelled: [],
-};
+export const CLAIM_TYPES = ["payment_claim", "partner_commission_claim", "sales_commission_claim"] as const;
+export type ClaimType = (typeof CLAIM_TYPES)[number];
 
-export const PARTNER_COMMISSION_STATUSES = [
-  "in_safety_period",
-  "eligible_for_claim",
-  "in_claim",
-  "claim_approved",
-  "ready_for_settlement",
-  "settled_successfully",
-  "rejected",
-  "adjusted",
-] as const;
-export type PartnerCommissionStatus = (typeof PARTNER_COMMISSION_STATUSES)[number];
-
-export const PARTNER_COMMISSION_TRANSITIONS: Record<PartnerCommissionStatus, PartnerCommissionStatus[]> = {
-  in_safety_period: ["eligible_for_claim", "rejected", "adjusted"],
-  eligible_for_claim: ["in_claim", "rejected", "adjusted"],
-  in_claim: ["claim_approved", "rejected", "adjusted"],
-  claim_approved: ["ready_for_settlement", "rejected", "adjusted"],
-  ready_for_settlement: ["settled_successfully", "rejected", "adjusted"],
-  settled_successfully: [],
-  rejected: [],
-  adjusted: [],
-};
-
-export const SALES_COMMISSION_STATUSES = [
-  "new",
-  "eligible_for_payout",
-  "in_payout_batch",
-  "approved_by_company",
-  "paid",
-  "rejected",
-  "adjusted",
-] as const;
-export type SalesCommissionStatus = (typeof SALES_COMMISSION_STATUSES)[number];
-
-export const SALES_COMMISSION_TRANSITIONS: Record<SalesCommissionStatus, SalesCommissionStatus[]> = {
-  new: ["eligible_for_payout", "rejected", "adjusted"],
-  eligible_for_payout: ["in_payout_batch", "rejected", "adjusted"],
-  in_payout_batch: ["approved_by_company", "rejected", "adjusted"],
-  approved_by_company: ["paid", "rejected", "adjusted"],
-  paid: [],
-  rejected: [],
-  adjusted: [],
-};
-
-export const CLAIM_STATUSES = ["draft", "approved", "rejected", "settled"] as const;
+export const CLAIM_STATUSES = ["draft", "approved", "rejected", "in_settlement", "settled"] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
-// THREE typed claims and settlements (one row per type per cycle).
-// - `payment`            : partner submits collected payments → company receives net.
-// - `partner_commission` : partner requests their commission → company pays.
-// - `sales_commission`   : partner submits sales-rep payouts → partner pays sales.
-export const CLAIM_TYPES = ["payment", "partner_commission", "sales_commission"] as const;
-export type ClaimType = (typeof CLAIM_TYPES)[number];
-export const SETTLEMENT_TYPES = CLAIM_TYPES;
-export type SettlementType = ClaimType;
+export const SETTLEMENT_TYPES = ["payment_settlement", "partner_commission_settlement", "sales_commission_settlement"] as const;
+export type SettlementType = (typeof SETTLEMENT_TYPES)[number];
 
-// Direction of money flow in a settlement.
-// payment            → partner_to_company  (partner remits collected money)
-// partner_commission → company_to_partner  (company pays partner)
-// sales_commission   → partner_to_sales    (partner pays sales rep)
-export const SETTLEMENT_DIRECTIONS = [
-  "partner_to_company",
-  "company_to_partner",
-  "partner_to_sales",
+export const SETTLEMENT_STATUSES = ["draft", "completed", "cancelled"] as const;
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
+export const FINANCIAL_EVENT_TYPES = [
+  "collection_confirmed_by_sales",
+  "handed_to_partner",
+  "net_due_calculated",
+  "company_received_net_amount",
+  "claim_created",
+  "claim_approved",
+  "claim_rejected",
+  "claim_moved_to_settlement",
+  "settlement_completed",
+  "item_voided",
+  "adjustment_created",
 ] as const;
-export type SettlementDirection = (typeof SETTLEMENT_DIRECTIONS)[number];
+export type FinancialEventType = (typeof FINANCIAL_EVENT_TYPES)[number];
 
-export function defaultDirectionFor(type: ClaimType): SettlementDirection {
-  switch (type) {
-    case "payment": return "partner_to_company";
-    case "partner_commission": return "company_to_partner";
-    case "sales_commission": return "partner_to_sales";
-  }
-}
-
-// Legacy — kept for back-compat with existing PayoutBatches UI/routes.
-export const PAYOUT_BATCH_STATUSES = ["draft", "approved", "paid"] as const;
-export type PayoutBatchStatus = (typeof PAYOUT_BATCH_STATUSES)[number];
-
-export const PAYOUT_CYCLES = ["monthly", "quarterly"] as const;
-export type PayoutCycle = (typeof PAYOUT_CYCLES)[number];
-
-export const FINANCIAL_NOTIFICATION_TYPES = [
-  "commission.eligible_for_claim",
-  "claim.created",
-  "claim.approved",
-  "claim.rejected",
-  "claim.settled",
-  "payment.received_by_company",
-  "payment.settled",
-  "settlement.completed",
-  "sales_commission.approved",
-  "sales_commission.paid",
-] as const;
-export type FinancialNotificationType = (typeof FINANCIAL_NOTIFICATION_TYPES)[number];
-
-export function isAllowedOrderPaymentTransition(from: OrderPaymentStatus, to: OrderPaymentStatus): boolean {
-  return ORDER_PAYMENT_TRANSITIONS[from]?.includes(to) ?? false;
-}
-export function isAllowedPartnerCommissionTransition(from: PartnerCommissionStatus, to: PartnerCommissionStatus): boolean {
-  return PARTNER_COMMISSION_TRANSITIONS[from]?.includes(to) ?? false;
-}
-export function isAllowedSalesCommissionTransition(from: SalesCommissionStatus, to: SalesCommissionStatus): boolean {
-  return SALES_COMMISSION_TRANSITIONS[from]?.includes(to) ?? false;
-}
+export const SALES_PAYOUT_CYCLES = ["monthly", "quarterly"] as const;
+export type SalesPayoutCycle = (typeof SALES_PAYOUT_CYCLES)[number];
 
 // Computes commission base from a package row and the configured base rule.
 export function commissionBase(
