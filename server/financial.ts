@@ -24,6 +24,21 @@ async function createFinancialEvent(tx: DbExecutor, data: { financialItemId: num
   await tx.insert(financialEvents).values({ ...data, amount: data.amount ?? null, createdBy: data.createdBy ?? null, salesUserId: data.salesUserId ?? null, eventNote: data.eventNote ?? null });
 }
 
+function startOfNextMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+function startOfNextQuarter(d: Date): Date { return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3 + 3, 1); }
+
+function buildClaimability(type: "payment_item" | "partner_commission_item" | "sales_commission_item", activatedAt: Date, safetyPeriodDays: number, salesPayoutCycle: "monthly" | "quarterly", now: Date): { eligibleForClaimAt: Date; isClaimable: boolean; claimBlockReason: string | null } {
+  const eligibleForClaimAt =
+    type === "payment_item" ? activatedAt
+      : type === "partner_commission_item" ? new Date(activatedAt.getTime() + (safetyPeriodDays * 24 * 60 * 60 * 1000))
+      : (salesPayoutCycle === "quarterly" ? startOfNextQuarter(activatedAt) : startOfNextMonth(activatedAt));
+  const isClaimable = eligibleForClaimAt <= now;
+  const claimBlockReason = isClaimable
+    ? null
+    : (type === "partner_commission_item" ? "Inside safety period" : "Awaiting payout cycle date");
+  return { eligibleForClaimAt, isClaimable, claimBlockReason };
+}
+
 export async function onRequestActivated(opts: { requestId: number; userId: number }, executor: DbExecutor = db) {
   const [r] = await executor.select().from(requests).where(eq(requests.id, opts.requestId));
   if (!r?.packageId) throw new Error(`request_missing_package:${opts.requestId}`);
@@ -39,21 +54,25 @@ export async function onRequestActivated(opts: { requestId: number; userId: numb
   const salesAmount = calcCommission(baseAmount, rates.salesPct);
   const netDueToCompany = Math.max(0, afterTax - partnerAmount);
   const now = new Date();
+  const activatedAt = r.activatedAt ?? now;
   const common = { relatedRequestId: r.id, relatedSrNumber: r.srNumber, relatedCustomerId: r.customerId, relatedPartnerId: r.partnerId, relatedSalesUserId: r.salesUserId, relatedPackageId: r.packageId, operationType: r.operationType, grossCustomerAmount: String(afterTax), itemPriceBeforeTax: String(beforeTax), taxPercentage: String(pkg.taxPercentage ?? 0), taxAmount: String(tax), finalPriceAfterTax: String(afterTax), commissionBase: String(baseAmount), partnerCommissionPercentage: String(rates.partnerPct), partnerCommissionAmount: String(partnerAmount), salesCommissionPercentage: String(rates.salesPct), salesCommissionAmount: String(salesAmount), netAmountDueToCompany: String(netDueToCompany), status: "not_added_to_claim" as const, claimBlockReason: null };
 
   const existing = await executor.select().from(financialItems).where(eq(financialItems.relatedRequestId, r.id));
   const byType = new Map(existing.map((x) => [x.type, x]));
-  const ensure = async (type: "payment_item" | "partner_commission_item" | "sales_commission_item", amount: number, isClaimable: boolean, claimBlockReason: string | null) => {
+  const ensure = async (type: "payment_item" | "partner_commission_item" | "sales_commission_item", amount: number, forceUnclaimableReason?: string) => {
     if (byType.has(type)) return byType.get(type)!;
-    const [item] = await executor.insert(financialItems).values({ ...common, type, amount: String(amount), isClaimable, eligibleForClaimAt: isClaimable ? now : null, claimBlockReason }).returning();
+    const claimability = buildClaimability(type, activatedAt, partner.safetyPeriodDays ?? 0, (partner.salesPayoutCycle as "monthly" | "quarterly") ?? "monthly", now);
+    const isClaimable = forceUnclaimableReason ? false : claimability.isClaimable;
+    const claimBlockReason = forceUnclaimableReason ?? claimability.claimBlockReason;
+    const [item] = await executor.insert(financialItems).values({ ...common, type, amount: String(amount), isClaimable, eligibleForClaimAt: claimability.eligibleForClaimAt, claimBlockReason }).returning();
     await createFinancialEvent(executor, { financialItemId: item.id, requestId: r.id, customerId: r.customerId, partnerId: r.partnerId, salesUserId: r.salesUserId, eventType: "item_created", amount: String(amount), createdBy: opts.userId, eventNote: `${type} created on activation` });
     await audit({ userId: opts.userId, action: "financial_item.created", entityType: "financial_item", entityId: item.id, requestId: r.id, customerId: r.customerId, partnerId: r.partnerId, newValue: item });
     return item;
   };
 
-  const payment = await ensure("payment_item", netDueToCompany, true, null);
-  const partnerCommission = await ensure("partner_commission_item", partnerAmount, partnerAmount > 0, partnerAmount > 0 ? null : "zero_amount");
-  const salesCommission = (partner.salesCommissionEnabled && salesAmount > 0 && r.salesUserId) ? await ensure("sales_commission_item", salesAmount, true, null) : null;
+  const payment = await ensure("payment_item", netDueToCompany);
+  const partnerCommission = await ensure("partner_commission_item", partnerAmount, partnerAmount > 0 ? undefined : "zero_amount");
+  const salesCommission = (partner.salesCommissionEnabled && salesAmount > 0 && r.salesUserId) ? await ensure("sales_commission_item", salesAmount) : null;
   return { paymentItemId: payment.id, partnerCommissionItemId: partnerCommission.id, salesCommissionItemId: salesCommission?.id ?? null };
 }
 
@@ -96,7 +115,22 @@ export async function createSettlement(opts: { claimId: number; userId: number; 
   return { id: s.id, settlementNumber, totalAmount, direction, type: c.type as ClaimType };
 }
 
-export async function runFinancialHousekeep() { const autoPartners = await db.select().from(partners).where(eq(partners.claimCycleType, "auto")); let claimsCreated = 0; for (const p of autoPartners) { const eligible = await db.select({ id: financialItems.id }).from(financialItems).where(and(eq(financialItems.relatedPartnerId, p.id), eq(financialItems.isClaimable, true), eq(financialItems.status, "not_added_to_claim"), eq(financialItems.type, "partner_commission_item"))); if (!eligible.length) continue; await createClaim({ type: "partner_commission_claim", partnerId: p.id, itemIds: eligible.map(e=>e.id), userId: null, autoGenerated: true }); claimsCreated++; } return { flipped: 0, claimsCreated, advancedSales: 0 }; }
+export async function runFinancialHousekeep() {
+  const now = new Date();
+  const flippedRows = await db.update(financialItems)
+    .set({ isClaimable: true, claimBlockReason: null, updatedAt: now })
+    .where(and(eq(financialItems.status, "not_added_to_claim"), eq(financialItems.isClaimable, false), lte(financialItems.eligibleForClaimAt, now)))
+    .returning({ id: financialItems.id });
+  const autoPartners = await db.select().from(partners).where(eq(partners.claimCycleType, "auto"));
+  let claimsCreated = 0;
+  for (const p of autoPartners) {
+    const eligible = await db.select({ id: financialItems.id }).from(financialItems).where(and(eq(financialItems.relatedPartnerId, p.id), eq(financialItems.isClaimable, true), eq(financialItems.status, "not_added_to_claim"), eq(financialItems.type, "partner_commission_item")));
+    if (!eligible.length) continue;
+    await createClaim({ type: "partner_commission_claim", partnerId: p.id, itemIds: eligible.map(e=>e.id), userId: null, autoGenerated: true });
+    claimsCreated++;
+  }
+  return { flipped: flippedRows.length, claimsCreated, advancedSales: 0 };
+}
 
 export function dateRangeFilter(col: PgColumn, from?: string | null, to?: string | null): SQL[] { const filters: SQL[] = []; if (from) filters.push(gte(col, new Date(from))); if (to) filters.push(lte(col, new Date(to))); return filters; }
 
