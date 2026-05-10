@@ -47,6 +47,12 @@ export function PayoutBatchesPage() {
   return (
     <div>
       <PageHeader title={t("nav.payout_batches")} subtitle={t("payoutBatches.subtitle")} />
+      <div className="stamp-card p-4 mb-4 bg-amber-50/60 border-amber-200">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm text-amber-900">{t("payoutBatches.deprecatedNotice")}</div>
+          <Link to="/claims?type=sales_commission" className="btn-primary whitespace-nowrap">{t("payoutBatches.goToClaims")}</Link>
+        </div>
+      </div>
       {can(user, "payout_batches:create") && (
         <div className="stamp-card p-5 mb-6">
           <div className="font-semibold mb-3">{t("payoutBatches.newBatch")}</div>

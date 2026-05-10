@@ -453,12 +453,13 @@ async function applyStageProjection(
       if (!pc) throw new Error("partner_commission_missing");
       if (pc.status !== "eligible_for_claim") throw new Error(`pc_wrong_status:${pc.status}`);
 
-      const claimNumber = `CLM-${Date.now()}-${r.partnerId}-${requestId}`;
+      const claimNumber = `PCC-${Date.now()}-${r.partnerId}-${requestId}`;
       const [c] = await tx
         .insert(claims)
         .values({
           claimNumber,
           partnerId: r.partnerId,
+          type: "partner_commission",
           status: "draft",
           totalAmount: pc.amount,
           createdByUserId: userId,
@@ -548,81 +549,112 @@ async function applyStageProjection(
     }
 
     case "fully_settled": {
-      // Run the settlement primitive bound to this claim (1-to-1).
+      // Settle the partner_commission claim bound to this request, then
+      // separately settle the order_payment by creating a payment claim
+      // and a payment settlement. Each settlement is independent under the
+      // refactored model — no netting.
       const [pc] = await tx
         .select()
         .from(partnerCommissions)
         .where(eq(partnerCommissions.requestId, requestId));
       if (!pc?.claimId) throw new Error("claim_missing");
-      // We must commit settlement creation in the SAME transaction. The
-      // existing createSettlement opens its own tx — call its inner logic
-      // directly by inlining the minimum required updates here would be
-      // duplicative; instead, complete the settlement projection manually
-      // since by this stage all amounts are known.
       const [c] = await tx.select().from(claims).where(eq(claims.id, pc.claimId));
       if (!c) throw new Error("claim_not_found");
-      if (c.status === "settled") return;
-
-      // Settle the order payment + partner commission, create settlement row.
       const [op] = await tx
         .select()
         .from(orderPayments)
         .where(eq(orderPayments.requestId, requestId));
       if (!op) throw new Error("order_payment_missing");
 
-      const netDue = Number(op.netDueToCompany);
-      const partnerTotal = Number(pc.amount);
-      const finalAmount = netDue - partnerTotal;
-      const direction = finalAmount === 0
-        ? "balanced"
-        : finalAmount > 0
-          ? "partner_to_company"
-          : "company_to_partner";
-      const settlementNumber = `STL-${Date.now()}-${r.partnerId}-${requestId}`;
-      const [stl] = await tx
-        .insert(settlements)
-        .values({
-          settlementNumber,
-          partnerId: r.partnerId,
-          claimId: c.id,
-          netDueToCompany: String(netDue),
-          partnerCommissionTotal: String(partnerTotal),
-          finalAmount: String(Math.abs(finalAmount)),
-          direction,
-          createdByUserId: userId,
-          completedAt: new Date(),
-        })
-        .returning();
+      // 1) Settle the PC claim via the canonical primitive.
+      if (c.status === "approved") {
+        const pcSettlementNumber = `PCS-${Date.now()}-${r.partnerId}-${requestId}`;
+        const [pcStl] = await tx
+          .insert(settlements)
+          .values({
+            settlementNumber: pcSettlementNumber,
+            partnerId: r.partnerId,
+            claimId: c.id,
+            type: "partner_commission",
+            totalAmount: c.totalAmount,
+            direction: "company_to_partner",
+            createdByUserId: userId,
+            completedAt: new Date(),
+          })
+          .returning();
+        // Stage 8 (`claim_approved_ready_for_settlement`) already advanced
+        // the PC into `ready_for_settlement`. Only run that step if it
+        // hasn't happened yet; either way we close out at
+        // `settled_successfully`.
+        if (pc.status === "claim_approved") {
+          const rPc1 = await transitionPartnerCommission(
+            { id: pc.id, toStatus: "ready_for_settlement", userId, reason: pcSettlementNumber, viaSettlement: true }, tx);
+          if (!rPc1.ok) throw new Error(`pc_ready_failed:${rPc1.error}`);
+        }
+        const rPc2 = await transitionPartnerCommission(
+          { id: pc.id, toStatus: "settled_successfully", userId, reason: pcSettlementNumber, viaSettlement: true }, tx);
+        if (!rPc2.ok) throw new Error(`pc_settle_failed:${rPc2.error}`);
+        await tx.update(partnerCommissions).set({ settlementId: pcStl.id }).where(eq(partnerCommissions.id, pc.id));
+        await tx.update(claims).set({
+          status: "settled", settledAt: new Date(), settlementId: pcStl.id, updatedAt: new Date(),
+        }).where(eq(claims.id, c.id));
+      }
 
-      const r1 = await transitionOrderPayment(
-        { id: op.id, toStatus: "settled", userId, reason: settlementNumber, viaSettlement: true },
-        tx,
-      );
-      if (!r1.ok) throw new Error(`op_settle_failed:${r1.error}`);
-      await tx
-        .update(orderPayments)
-        .set({ settlementId: stl.id })
-        .where(eq(orderPayments.id, op.id));
+      // 2) Settle the order_payment by minting a payment claim+settlement
+      // bound to this single OP. Skips if already settled.
+      if (op.status !== "settled") {
+        // Move OP into the payment-claim flow if it is still in
+        // received_by_company (legacy path) — the gated forward steps
+        // are reached via createClaim/createSettlement primitives in
+        // the normal flow, but at this stage we own the transaction.
+        const opClaimNumber = `PMC-${Date.now()}-${r.partnerId}-${requestId}`;
+        const [opClaim] = await tx
+          .insert(claims)
+          .values({
+            claimNumber: opClaimNumber,
+            partnerId: r.partnerId,
+            type: "payment",
+            status: "approved",
+            totalAmount: op.netDueToCompany,
+            createdByUserId: userId,
+            submittedAt: new Date(),
+            approvedAt: new Date(),
+            approvedByUserId: userId,
+          })
+          .returning();
+        await tx.insert(claimItems).values({
+          claimId: opClaim.id, orderPaymentId: op.id, amount: op.netDueToCompany,
+        });
+        await tx.update(orderPayments).set({ claimId: opClaim.id }).where(eq(orderPayments.id, op.id));
 
-      const r2 = await transitionPartnerCommission(
-        { id: pc.id, toStatus: "settled_successfully", userId, reason: settlementNumber, viaSettlement: true },
-        tx,
-      );
-      if (!r2.ok) throw new Error(`pc_settle_failed:${r2.error}`);
-      await tx
-        .update(partnerCommissions)
-        .set({ settlementId: stl.id })
-        .where(eq(partnerCommissions.id, pc.id));
-
-      await tx
-        .update(claims)
-        .set({
-          status: "settled",
-          settledAt: new Date(),
-          settlementId: stl.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(claims.id, c.id));
+        const opSettlementNumber = `PMS-${Date.now()}-${r.partnerId}-${requestId}`;
+        const [opStl] = await tx
+          .insert(settlements)
+          .values({
+            settlementNumber: opSettlementNumber,
+            partnerId: r.partnerId,
+            claimId: opClaim.id,
+            type: "payment",
+            totalAmount: op.netDueToCompany,
+            direction: "partner_to_company",
+            createdByUserId: userId,
+            completedAt: new Date(),
+          })
+          .returning();
+        // Walk OP through the terminal states using the gated primitives.
+        if (op.status === "net_amount_due_to_company") {
+          const rR = await transitionOrderPayment(
+            { id: op.id, toStatus: "received_by_company", userId, reason: opSettlementNumber, viaSettlement: true }, tx);
+          if (!rR.ok) throw new Error(`op_received_failed:${rR.error}`);
+        }
+        const rS = await transitionOrderPayment(
+          { id: op.id, toStatus: "settled", userId, reason: opSettlementNumber, viaSettlement: true }, tx);
+        if (!rS.ok) throw new Error(`op_settle_failed:${rS.error}`);
+        await tx.update(orderPayments).set({ settlementId: opStl.id }).where(eq(orderPayments.id, op.id));
+        await tx.update(claims).set({
+          status: "settled", settledAt: new Date(), settlementId: opStl.id, updatedAt: new Date(),
+        }).where(eq(claims.id, opClaim.id));
+      }
       return;
     }
   }

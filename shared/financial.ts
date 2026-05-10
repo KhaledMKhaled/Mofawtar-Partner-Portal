@@ -1,10 +1,18 @@
 // Phase 3 — financial state machines, transitions, and shared types.
 
+// --- ORDER PAYMENT FLOW (mirrors PC and SC: ready → in_claim → claim_approved → settled) ---
+// `in_payment_claim` and `payment_claim_approved` are the new claim-gated
+// stages added to align with the unified 3-claim / 3-settlement model.
+// `received_by_company` is preserved as a legacy alias (maps to
+// `payment_claim_approved` semantically); kept so historical data and any
+// remaining routes continue to function during the transition.
 export const ORDER_PAYMENT_STATUSES = [
   "pending_collection_confirmation",
   "collected_by_sales",
   "held_by_partner",
   "net_amount_due_to_company",
+  "in_payment_claim",
+  "payment_claim_approved",
   "received_by_company",
   "settled",
   "refunded",
@@ -16,7 +24,9 @@ export const ORDER_PAYMENT_TRANSITIONS: Record<OrderPaymentStatus, OrderPaymentS
   pending_collection_confirmation: ["collected_by_sales", "refunded", "cancelled"],
   collected_by_sales: ["held_by_partner", "refunded", "cancelled"],
   held_by_partner: ["net_amount_due_to_company", "refunded", "cancelled"],
-  net_amount_due_to_company: ["received_by_company", "refunded", "cancelled"],
+  net_amount_due_to_company: ["in_payment_claim", "received_by_company", "refunded", "cancelled"],
+  in_payment_claim: ["payment_claim_approved", "net_amount_due_to_company", "refunded", "cancelled"],
+  payment_claim_approved: ["settled", "received_by_company", "refunded", "cancelled"],
   received_by_company: ["settled", "refunded", "cancelled"],
   settled: [],
   refunded: [],
@@ -70,6 +80,35 @@ export const SALES_COMMISSION_TRANSITIONS: Record<SalesCommissionStatus, SalesCo
 export const CLAIM_STATUSES = ["draft", "approved", "rejected", "settled"] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
+// THREE typed claims and settlements (one row per type per cycle).
+// - `payment`            : partner submits collected payments → company receives net.
+// - `partner_commission` : partner requests their commission → company pays.
+// - `sales_commission`   : partner submits sales-rep payouts → partner pays sales.
+export const CLAIM_TYPES = ["payment", "partner_commission", "sales_commission"] as const;
+export type ClaimType = (typeof CLAIM_TYPES)[number];
+export const SETTLEMENT_TYPES = CLAIM_TYPES;
+export type SettlementType = ClaimType;
+
+// Direction of money flow in a settlement.
+// payment            → partner_to_company  (partner remits collected money)
+// partner_commission → company_to_partner  (company pays partner)
+// sales_commission   → partner_to_sales    (partner pays sales rep)
+export const SETTLEMENT_DIRECTIONS = [
+  "partner_to_company",
+  "company_to_partner",
+  "partner_to_sales",
+] as const;
+export type SettlementDirection = (typeof SETTLEMENT_DIRECTIONS)[number];
+
+export function defaultDirectionFor(type: ClaimType): SettlementDirection {
+  switch (type) {
+    case "payment": return "partner_to_company";
+    case "partner_commission": return "company_to_partner";
+    case "sales_commission": return "partner_to_sales";
+  }
+}
+
+// Legacy — kept for back-compat with existing PayoutBatches UI/routes.
 export const PAYOUT_BATCH_STATUSES = ["draft", "approved", "paid"] as const;
 export type PayoutBatchStatus = (typeof PAYOUT_BATCH_STATUSES)[number];
 

@@ -3,10 +3,12 @@ import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db.js";
 import {
-  claims, claimItems, partnerCommissions, partners, customers, packages, users,
+  claims, claimItems, partnerCommissions, salesCommissions, orderPayments,
+  partners, customers, packages, users, requests,
 } from "../schema.js";
 import { getUser, requirePerm } from "../auth.js";
 import { createClaim, approveClaim, rejectClaim, createSettlement } from "../financial.js";
+import { CLAIM_TYPES, type ClaimType } from "../../shared/financial.js";
 
 export const claimsRouter = Router();
 
@@ -14,13 +16,18 @@ function partnerScoped(cu: { roleKey: string; partnerId: number | null }) {
   return cu.partnerId && cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant";
 }
 
+function isClaimType(v: string | undefined): v is ClaimType {
+  return !!v && (CLAIM_TYPES as readonly string[]).includes(v);
+}
+
 claimsRouter.get("/", requirePerm("claims:view"), async (req, res) => {
   const cu = getUser(req)!;
-  const { status, partnerId, from, to } = req.query as Record<string, string | undefined>;
+  const { status, partnerId, from, to, type } = req.query as Record<string, string | undefined>;
   const filters: SQL[] = [];
   if (partnerScoped(cu)) filters.push(eq(claims.partnerId, cu.partnerId!));
   else if (partnerId) filters.push(eq(claims.partnerId, Number(partnerId)));
   if (status) filters.push(eq(claims.status, status));
+  if (isClaimType(type)) filters.push(eq(claims.type, type));
   if (from) filters.push(sql`${claims.createdAt} >= ${new Date(from)}`);
   if (to) filters.push(sql`${claims.createdAt} <= ${new Date(to)}`);
   const where = filters.length ? and(...filters) : undefined;
@@ -28,6 +35,7 @@ claimsRouter.get("/", requirePerm("claims:view"), async (req, res) => {
     .select({
       id: claims.id,
       claimNumber: claims.claimNumber,
+      type: claims.type,
       partnerId: claims.partnerId,
       partnerName: partners.name,
       status: claims.status,
@@ -41,29 +49,72 @@ claimsRouter.get("/", requirePerm("claims:view"), async (req, res) => {
     })
     .from(claims)
     .leftJoin(partners, eq(partners.id, claims.partnerId));
-  const rows = where ? await q.where(where).orderBy(desc(claims.createdAt)).limit(200) : await q.orderBy(desc(claims.createdAt)).limit(200);
+  const rows = where
+    ? await q.where(where).orderBy(desc(claims.createdAt)).limit(200)
+    : await q.orderBy(desc(claims.createdAt)).limit(200);
   res.json(rows);
 });
 
+// Eligible items for a claim of the given `type`. Returns the rows currently
+// sitting at the "ready to be claimed" status for that subject type.
 claimsRouter.get("/eligible", requirePerm("claims:view"), async (req, res) => {
   const cu = getUser(req)!;
   const partnerId = partnerScoped(cu) ? cu.partnerId! : Number(req.query.partnerId);
   if (!partnerId) return res.status(400).json({ error: "partner_required" });
+  const type = (req.query.type as string | undefined) ?? "partner_commission";
+  if (!isClaimType(type)) return res.status(400).json({ error: "invalid_type" });
+
+  if (type === "partner_commission") {
+    const rows = await db
+      .select({
+        id: partnerCommissions.id,
+        customerName: customers.name,
+        packageName: packages.name,
+        amount: partnerCommissions.amount,
+        pct: partnerCommissions.pct,
+        baseAmount: partnerCommissions.baseAmount,
+        createdAt: partnerCommissions.createdAt,
+      })
+      .from(partnerCommissions)
+      .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
+      .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
+      .where(and(eq(partnerCommissions.partnerId, partnerId), eq(partnerCommissions.status, "eligible_for_claim")))
+      .orderBy(desc(partnerCommissions.createdAt));
+    return res.json(rows);
+  }
+  if (type === "payment") {
+    const rows = await db
+      .select({
+        id: orderPayments.id,
+        customerName: customers.name,
+        packageName: packages.name,
+        amount: orderPayments.netDueToCompany,
+        grossAmount: orderPayments.grossAmount,
+        createdAt: orderPayments.createdAt,
+      })
+      .from(orderPayments)
+      .leftJoin(customers, eq(customers.id, orderPayments.customerId))
+      .leftJoin(packages, eq(packages.id, orderPayments.packageId))
+      .where(and(eq(orderPayments.partnerId, partnerId), eq(orderPayments.status, "net_amount_due_to_company")))
+      .orderBy(desc(orderPayments.createdAt));
+    return res.json(rows);
+  }
+  // sales_commission
   const rows = await db
     .select({
-      id: partnerCommissions.id,
+      id: salesCommissions.id,
+      salesName: users.name,
       customerName: customers.name,
       packageName: packages.name,
-      amount: partnerCommissions.amount,
-      pct: partnerCommissions.pct,
-      baseAmount: partnerCommissions.baseAmount,
-      createdAt: partnerCommissions.createdAt,
+      amount: salesCommissions.amount,
+      createdAt: salesCommissions.createdAt,
     })
-    .from(partnerCommissions)
-    .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-    .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
-    .where(and(eq(partnerCommissions.partnerId, partnerId), eq(partnerCommissions.status, "eligible_for_claim")))
-    .orderBy(desc(partnerCommissions.createdAt));
+    .from(salesCommissions)
+    .leftJoin(users, eq(users.id, salesCommissions.salesUserId))
+    .leftJoin(customers, eq(customers.id, salesCommissions.customerId))
+    .leftJoin(packages, eq(packages.id, salesCommissions.packageId))
+    .where(and(eq(salesCommissions.partnerId, partnerId), eq(salesCommissions.status, "eligible_for_payout")))
+    .orderBy(desc(salesCommissions.createdAt));
   res.json(rows);
 });
 
@@ -73,19 +124,53 @@ claimsRouter.get("/:id", requirePerm("claims:view"), async (req, res) => {
   const [c] = await db.select().from(claims).where(eq(claims.id, id));
   if (!c) return res.status(404).json({ error: "not_found" });
   if (partnerScoped(cu) && c.partnerId !== cu.partnerId) return res.status(403).json({ error: "forbidden" });
-  const items = await db
-    .select({
-      id: claimItems.id,
-      partnerCommissionId: claimItems.partnerCommissionId,
-      amount: claimItems.amount,
-      customerName: customers.name,
-      packageName: packages.name,
-    })
-    .from(claimItems)
-    .leftJoin(partnerCommissions, eq(partnerCommissions.id, claimItems.partnerCommissionId))
-    .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
-    .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
-    .where(eq(claimItems.claimId, id));
+  // Items are polymorphic — join the appropriate subject table by type.
+  let items: Array<{ id: number; childId: number | null; amount: string; customerName: string | null; packageName: string | null; salesName?: string | null }> = [];
+  if (c.type === "partner_commission") {
+    items = await db
+      .select({
+        id: claimItems.id,
+        childId: claimItems.partnerCommissionId,
+        amount: claimItems.amount,
+        customerName: customers.name,
+        packageName: packages.name,
+      })
+      .from(claimItems)
+      .leftJoin(partnerCommissions, eq(partnerCommissions.id, claimItems.partnerCommissionId))
+      .leftJoin(customers, eq(customers.id, partnerCommissions.customerId))
+      .leftJoin(packages, eq(packages.id, partnerCommissions.packageId))
+      .where(eq(claimItems.claimId, id));
+  } else if (c.type === "payment") {
+    items = await db
+      .select({
+        id: claimItems.id,
+        childId: claimItems.orderPaymentId,
+        amount: claimItems.amount,
+        customerName: customers.name,
+        packageName: packages.name,
+      })
+      .from(claimItems)
+      .leftJoin(orderPayments, eq(orderPayments.id, claimItems.orderPaymentId))
+      .leftJoin(customers, eq(customers.id, orderPayments.customerId))
+      .leftJoin(packages, eq(packages.id, orderPayments.packageId))
+      .where(eq(claimItems.claimId, id));
+  } else if (c.type === "sales_commission") {
+    items = await db
+      .select({
+        id: claimItems.id,
+        childId: claimItems.salesCommissionId,
+        amount: claimItems.amount,
+        customerName: customers.name,
+        packageName: packages.name,
+        salesName: users.name,
+      })
+      .from(claimItems)
+      .leftJoin(salesCommissions, eq(salesCommissions.id, claimItems.salesCommissionId))
+      .leftJoin(users, eq(users.id, salesCommissions.salesUserId))
+      .leftJoin(customers, eq(customers.id, salesCommissions.customerId))
+      .leftJoin(packages, eq(packages.id, salesCommissions.packageId))
+      .where(eq(claimItems.claimId, id));
+  }
   const [approver] = c.approvedByUserId
     ? await db.select({ name: users.name }).from(users).where(eq(users.id, c.approvedByUserId))
     : [{ name: null }];
@@ -93,21 +178,30 @@ claimsRouter.get("/:id", requirePerm("claims:view"), async (req, res) => {
 });
 
 const createInput = z.object({
+  type: z.enum(CLAIM_TYPES),
   partnerId: z.coerce.number().int().optional(),
-  partnerCommissionIds: z.array(z.coerce.number().int()).min(1),
+  itemIds: z.array(z.coerce.number().int()).min(1),
   notes: z.string().optional(),
 });
 
 claimsRouter.post("/", requirePerm("claims:create"), async (req, res) => {
   const cu = getUser(req)!;
-  const parsed = createInput.safeParse(req.body);
+  // Back-compat: accept the legacy `partnerCommissionIds` field as an alias
+  // for `itemIds` so any existing client builds keep working during rollout.
+  const body = { ...req.body };
+  if (!body.itemIds && Array.isArray(body.partnerCommissionIds)) {
+    body.itemIds = body.partnerCommissionIds;
+  }
+  if (!body.type) body.type = "partner_commission";
+  const parsed = createInput.safeParse(body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_input", details: parsed.error.flatten() });
   const partnerId = partnerScoped(cu) ? cu.partnerId! : (parsed.data.partnerId ?? cu.partnerId ?? 0);
   if (!partnerId) return res.status(400).json({ error: "partner_required" });
   try {
     const result = await createClaim({
+      type: parsed.data.type,
       partnerId,
-      partnerCommissionIds: parsed.data.partnerCommissionIds,
+      itemIds: parsed.data.itemIds,
       userId: cu.id,
       notes: parsed.data.notes,
     });
@@ -131,19 +225,13 @@ claimsRouter.post("/:id/approve", requirePerm("claims:approve"), async (req, res
 });
 
 claimsRouter.post("/:id/settle", requirePerm("claims:approve"), async (req, res) => {
-  // Explicit "Settle claim" lifecycle action: creates a settlement bound
-  // to this claim, advancing the claim's partner commissions through
-  // ready_for_settlement -> settled_successfully and marking the claim
-  // as settled. Mirrors the implicit settlement creation path so the
-  // UI can offer a one-click settle button.
+  // One-click "settle this claim" — creates the matching settlement bound
+  // to the claim. Each settlement is independent (no netting).
   const cu = getUser(req)!;
   if (cu.roleKey !== "company_super_admin" && cu.roleKey !== "company_accountant") return res.status(403).json({ error: "forbidden" });
   const id = Number(req.params.id);
-  const [c] = await db.select().from(claims).where(eq(claims.id, id));
-  if (!c) return res.status(404).json({ error: "not_found" });
-  if (c.status !== "approved") return res.status(409).json({ error: "claim_not_approved" });
   try {
-    const result = await createSettlement({ partnerId: c.partnerId, claimId: id, userId: cu.id, notes: (req.body?.notes as string | undefined) });
+    const result = await createSettlement({ claimId: id, userId: cu.id, notes: (req.body?.notes as string | undefined) });
     res.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
