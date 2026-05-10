@@ -104,15 +104,72 @@ export async function createClaim(opts: { type: ClaimType; partnerId: number; it
 export async function approveClaim(claimId: number, userId: number): Promise<void> { await db.update(claims).set({ status: "approved", approvedAt: new Date(), approvedBy: userId }).where(eq(claims.id, claimId)); await audit({ userId, action: "claim.approved", entityType: "claim", entityId: claimId }); }
 export async function rejectClaim(claimId: number, userId: number, reason: string): Promise<void> { const items = await db.select().from(claimItems).where(eq(claimItems.claimId, claimId)); await db.transaction(async (tx)=>{ await tx.update(claims).set({ status: "rejected", rejectedAt: new Date(), rejectedBy: userId, rejectionReason: reason }).where(eq(claims.id, claimId)); for (const it of items) await tx.update(financialItems).set({ status: "not_added_to_claim", claimId: null }).where(eq(financialItems.id, it.financialItemId)); }); await audit({ userId, action: "claim.rejected", entityType: "claim", entityId: claimId, note: reason }); }
 
-export async function createSettlement(opts: { claimId: number; userId: number; notes?: string; }) {
-  const [c] = await db.select().from(claims).where(eq(claims.id, opts.claimId)); if (!c || c.status !== "approved") throw new Error("claim_not_approved");
-  const totalAmount = Number(c.totalAmount); const direction = defaultDirectionFor(c.type as ClaimType); const settlementNumber = `SET-${Date.now()}-${c.id}`;
-  const [s] = await db.insert(settlements).values({ settlementNumber, type: c.type.replace("claim", "settlement"), status: "completed", totalAmount: String(totalAmount), createdBy: opts.userId, completedBy: opts.userId, completedAt: new Date(), notes: opts.notes }).returning();
+export async function createDraftSettlement(opts: { claimId: number; userId: number; notes?: string; }) {
+  const [c] = await db.select().from(claims).where(eq(claims.id, opts.claimId));
+  if (!c || c.status !== "approved") throw new Error("claim_not_approved");
+  const totalAmount = Number(c.totalAmount);
+  const settlementNumber = `SET-${Date.now()}-${c.id}`;
+  const [s] = await db.insert(settlements).values({
+    settlementNumber,
+    type: c.type.replace("claim", "settlement"),
+    status: "draft",
+    totalAmount: String(totalAmount),
+    createdBy: opts.userId,
+    notes: opts.notes,
+  }).returning();
+  await audit({ userId: opts.userId, action: "settlement.draft_created", entityType: "settlement", entityId: s.id });
+  return { settlement: s, claim: c };
+}
+
+export async function addApprovedClaimToSettlement(opts: { settlementId: number; claimId: number; userId: number; }) {
+  const [s] = await db.select().from(settlements).where(eq(settlements.id, opts.settlementId));
+  const [c] = await db.select().from(claims).where(eq(claims.id, opts.claimId));
+  if (!s) throw new Error("settlement_not_found");
+  if (!c || c.status !== "approved") throw new Error("claim_not_approved");
+  if (s.status !== "draft") throw new Error("settlement_not_draft");
+  if (s.type !== c.type.replace("claim", "settlement")) throw new Error("claim_type_mismatch");
+
   const items = await db.select().from(claimItems).where(eq(claimItems.claimId, c.id));
-  for (const it of items) await db.update(financialItems).set({ status: "settled", settlementId: s.id, settledAt: new Date(), updatedAt: new Date() }).where(eq(financialItems.id, it.financialItemId));
-  await db.update(claims).set({ status: "settled", settlementId: s.id, settledAt: new Date() }).where(eq(claims.id, c.id));
+  await db.transaction(async (tx) => {
+    await tx.update(claims).set({ status: "in_settlement", settlementId: s.id }).where(eq(claims.id, c.id));
+    for (const it of items) {
+      const [fi] = await tx.select().from(financialItems).where(eq(financialItems.id, it.financialItemId));
+      await tx.update(financialItems).set({ status: "added_to_settlement", settlementId: s.id, updatedAt: new Date() }).where(eq(financialItems.id, it.financialItemId));
+      if (fi) {
+        await createFinancialEvent(tx, { financialItemId: fi.id, requestId: fi.relatedRequestId, customerId: fi.relatedCustomerId, partnerId: fi.relatedPartnerId, salesUserId: fi.relatedSalesUserId, eventType: "claim_moved_to_settlement", amount: fi.amount, createdBy: opts.userId, eventNote: s.settlementNumber });
+      }
+    }
+  });
+  await audit({ userId: opts.userId, action: "claim.moved_to_settlement", entityType: "claim", entityId: c.id });
+}
+
+export async function completeSettlement(opts: { settlementId: number; userId: number; }) {
+  const [s] = await db.select().from(settlements).where(eq(settlements.id, opts.settlementId));
+  if (!s) throw new Error("settlement_not_found");
+  const [c] = await db.select().from(claims).where(eq(claims.settlementId, s.id));
+  if (!c) throw new Error("settlement_has_no_claim");
+  const items = await db.select().from(claimItems).where(eq(claimItems.claimId, c.id));
+  const settledAt = new Date();
+
+  await db.transaction(async (tx) => {
+    await tx.update(settlements).set({ status: "completed", completedBy: opts.userId, completedAt: settledAt }).where(eq(settlements.id, s.id));
+    await tx.update(claims).set({ status: "settled", settledAt }).where(eq(claims.id, c.id));
+    for (const it of items) {
+      const [fi] = await tx.select().from(financialItems).where(eq(financialItems.id, it.financialItemId));
+      await tx.update(financialItems).set({ status: "settled", settlementId: s.id, settledAt, updatedAt: settledAt }).where(eq(financialItems.id, it.financialItemId));
+      if (fi) {
+        await createFinancialEvent(tx, { financialItemId: fi.id, requestId: fi.relatedRequestId, customerId: fi.relatedCustomerId, partnerId: fi.relatedPartnerId, salesUserId: fi.relatedSalesUserId, eventType: "settlement_completed", amount: fi.amount, createdBy: opts.userId, eventNote: s.settlementNumber });
+      }
+    }
+  });
   await audit({ userId: opts.userId, action: "settlement.completed", entityType: "settlement", entityId: s.id });
-  return { id: s.id, settlementNumber, totalAmount, direction, type: c.type as ClaimType };
+}
+
+export async function createSettlement(opts: { claimId: number; userId: number; notes?: string; }) {
+  const { settlement, claim } = await createDraftSettlement(opts);
+  await addApprovedClaimToSettlement({ settlementId: settlement.id, claimId: claim.id, userId: opts.userId });
+  await completeSettlement({ settlementId: settlement.id, userId: opts.userId });
+  return { id: settlement.id, settlementNumber: settlement.settlementNumber, totalAmount: Number(settlement.totalAmount), direction: defaultDirectionFor(claim.type as ClaimType), type: claim.type as ClaimType };
 }
 
 export async function runFinancialHousekeep() {
