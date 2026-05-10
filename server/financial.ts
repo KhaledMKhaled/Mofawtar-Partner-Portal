@@ -65,22 +65,32 @@ export async function resolveCommissionRates(
     )
     .limit(1);
 
-  // Spec precedence: special rule (per partner+package+operation) -> partner
-  // default -> none. Package defaults are intentionally NOT consulted here.
+  // Precedence (most specific wins):
+  //   1. Per-partner + package + operation override row in `commission_rules`
+  //   2. Package's own default % (only when > 0 — treats 0 as "unset" so a
+  //      package without a configured rate falls through to the partner's
+  //      general rate; this matches the spec: "the partner % is the general
+  //      rate; when it conflicts with the package's own rate, the package
+  //      wins")
+  //   3. Partner's default %
+  // Each rate (partner / sales) is resolved INDEPENDENTLY — a package may
+  // override only the partner side and leave the sales side to the partner
+  // default, or vice versa.
+  const partnerDefault = partner ? Number(partner.partnerCommissionPct ?? 0) : 0;
+  const salesDefault = partner ? Number(partner.salesCommissionPct ?? 0) : 0;
+  const pkgPartner = pkg ? Number(pkg.defaultPartnerCommissionPct ?? 0) : 0;
+  const pkgSales = pkg ? Number(pkg.defaultSalesCommissionPct ?? 0) : 0;
+
   let partnerPct: number;
   let salesPct: number;
   if (rule) {
     partnerPct = Number(rule.partnerCommissionPct);
     salesPct = Number(rule.salesCommissionPct);
-  } else if (partner) {
-    partnerPct = Number(partner.partnerCommissionPct ?? 0);
-    salesPct = partner.salesCommissionEnabled ? Number(partner.salesCommissionPct ?? 0) : 0;
   } else {
-    partnerPct = 0;
-    salesPct = 0;
+    partnerPct = pkgPartner > 0 ? pkgPartner : partnerDefault;
+    salesPct = pkgSales > 0 ? pkgSales : salesDefault;
   }
   if (!partner?.salesCommissionEnabled) salesPct = 0;
-  void pkg;
   return { partnerPct, salesPct };
 }
 
